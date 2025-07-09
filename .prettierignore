@@ -1,0 +1,32 @@
+# .prettierignore
+
+# Dependencies
+node_modules
+
+# Next.js build outputs
+.next/
+out/
+
+# Other build artifacts
+build/
+dist/
+
+# Vercel specific
+.vercel/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Config files (if you prefer manual formatting)
+# *.config.js
+# *.config.mjs
+
+# Package manager lock files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Generated files (like prisma client potentially)
+# src/generated/

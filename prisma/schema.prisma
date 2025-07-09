@@ -1,0 +1,126 @@
+// prisma/schema.prisma
+
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Specifies the database connection details
+datasource db {
+  // Provider: Make sure this matches your chosen database!
+  // "postgresql" for Supabase, Vercel Postgres, or standard PostgreSQL.
+  // "mysql" for PlanetScale or standard MySQL.
+  // Adjust if necessary.
+  provider = "postgresql"
+  // URL: Loads the connection string from the .env file.
+  // Ensure your actual DATABASE_URL is set correctly in .env
+  url      = env("DATABASE_URL")
+}
+
+// Configures the Prisma Client generator
+generator client {
+  // Specifies that Prisma Client for JavaScript/TypeScript should be generated.
+  provider = "prisma-client-js"
+}
+
+// --- Define your database models below this line ---
+
+// Model representing the User table
+model User {
+  // Primary Key: Unique identifier for each user.
+  // String type is flexible (e.g., for IDs from auth providers).
+  // @id designates it as the primary key.
+  // @default(cuid()) automatically generates a collision-resistant unique ID (alternative: uuid()).
+  id            String    @id @default(cuid())
+
+  // User's display name. Optional field denoted by '?'.
+  name          String?
+  // User's email address. Required and must be unique across all users.
+  email         String    @unique
+  // Timestamp for email verification. Optional.
+  emailVerified DateTime?
+  // URL for user's profile image. Optional.
+  image         String?
+
+  // Timestamps: Automatically managed by Prisma
+  // @default(now()) sets the creation time automatically when a User record is created.
+  createdAt     DateTime  @default(now())
+  // @updatedAt automatically updates this field whenever the User record is modified.
+  updatedAt     DateTime  @updatedAt
+
+  // Relation: Defines the one-to-many relationship between User and Habit.
+  // A user can have multiple habits.
+  // 'habits' is the relation field name used to access related habits in Prisma Client.
+  habits        Habit[]
+}
+
+// Model representing the Habit table
+model Habit {
+  // Primary Key: Unique identifier for each habit.
+  id            String    @id @default(cuid())
+
+  // Foreign Key & Relation: Links Habit to the User who owns it.
+  // 'userId' stores the actual foreign key value (the User's id).
+  userId        String
+  // 'user' is the relation field.
+  // @relation links this Habit to a specific User.
+  // 'fields: [userId]' specifies that the 'userId' field in this model holds the foreign key.
+  // 'references: [id]' specifies that 'userId' refers to the 'id' field in the 'User' model.
+  // onDelete: Cascade (optional, but good practice) means if a User is deleted, their Habits are also deleted.
+  // Consider the implications of Cascade vs. other options like Restrict or SetNull based on your app's logic.
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Habit details
+  name          String    // Required name of the habit.
+  description   String?   // Optional description.
+  // Frequency of the habit (e.g., "daily", "weekly").
+  // Using String for simplicity now. Could be enhanced with an Enum later.
+  frequency     String
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relation: Defines the one-to-many relationship between Habit and HabitRecord.
+  // A habit can have multiple tracking records.
+  // 'records' is the relation field name.
+  records       HabitRecord[]
+
+  // Database Index: Improves lookup performance when querying habits by userId.
+  @@index([userId])
+}
+
+// Model representing the HabitRecord table (tracking log)
+model HabitRecord {
+  // Primary Key: Unique identifier for each tracking record.
+  id            String    @id @default(cuid())
+
+  // Foreign Key & Relation: Links this record to a specific Habit.
+  habitId       String
+  habit         Habit     @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  // Tracking details
+  // The specific date this record applies to.
+  // Prisma maps DateTime to the appropriate date/timestamp type in the database.
+  date          DateTime
+  // Boolean flag indicating completion status.
+  // @default(false) sets the initial state to not completed.
+  completed     Boolean   @default(false)
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Database Index: Improves lookup performance when querying records by habitId.
+  @@index([habitId])
+
+  // Multi-field Unique Constraint: Ensures there is only one record
+  // per habit per date. Prevents duplicate entries for the same day.
+  @@unique([habitId, date])
+}
+
+// --- Optional: Defining Enums (Example for future frequency enhancement) ---
+// enum FrequencyType {
+//  DAILY
+//  WEEKLY
+//  MONTHLY
+// }
+// You could then change Habit.frequency to: frequency FrequencyType
