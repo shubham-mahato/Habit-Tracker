@@ -6,14 +6,14 @@ import React from 'react'
 // Clerk handles all the logic, form fields, error handling, and multi-step flows.
 export default function SignInPage() {
   return (
-    <div className='flex min-h-screen items-center justify-center bg-muted/40'>
+    <div className='bg-muted/40 flex min-h-screen items-center justify-center'>
       {/* Container to center the Sign-In component */}
       <SignIn
         path='/sign-in' // Tells Clerk the base path for the sign-in flow
         // Optional: Customize appearance to match your theme
         appearance={{
           elements: {
-            formButtonPrimary: 
+            formButtonPrimary:
               'bg-primary text-primary-foreground hover:bg-primary/90',
             card: 'shadow-md',
             headerTitle: 'text-2xl font-semibold',

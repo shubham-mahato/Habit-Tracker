@@ -1,3 +1,4 @@
+// eslint.config.mjs
 import { dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { FlatCompat } from '@eslint/eslintrc'
@@ -28,6 +29,7 @@ const eslintConfig = [
     rules: {
       'prettier/prettier': 'error',
       '@typescript-eslint/no-unused-vars': 'warn',
+      'react/no-unescaped-entities': 'off', // Add this line
       quotes: [
         'error',
         'single',
