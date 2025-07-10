@@ -37,6 +37,12 @@
   // Format files on save
   "editor.formatOnSave": true,
 
+  // ---- Line Ending Fixes ----
+  "files.eol": "\n",
+  "prettier.endOfLine": "auto",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
   // ---- Tailwind ----
   // Helps with Tailwind class sorting/intellisense
   "files.associations": {

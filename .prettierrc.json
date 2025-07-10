@@ -2,6 +2,7 @@
   "semi": false,
   "singleQuote": true,
   "jsxSingleQuote": true,
+  "endOfLine": "auto",
   "tabWidth": 2,
   "useTabs": false,
   "trailingComma": "es5",

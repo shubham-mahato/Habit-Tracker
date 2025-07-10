@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
+import HabitList from '@/components/HabitList'
 
 export default async function DashboardPage() {
   // Authentication check
@@ -22,22 +23,8 @@ export default async function DashboardPage() {
 
       {/* Section for displaying the list of habits */}
       <section>
-        {/* We will replace this placeholder div with the <HabitList /> component
-            in the next task. That component will fetch the habits for 'userId'
-            and render them using the Card-based layout we designed.
-            The layout might use a grid structure like below.
-        */}
-        <div className='text-muted-foreground rounded border border-dashed p-4'>
-          <p className='text-center'>Habit List Area</p>
-          <p className='text-center text-sm'>
-            (A grid of Habit Cards will appear here)
-          </p>
-          {/* Conceptual Grid Structure (Implementation will be in HabitList.tsx): */}
-          {/* <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4"> */}
-          {/* <Card>...</Card> */}
-          {/* <Card>...</Card> */}
-          {/* </div> */}
-        </div>
+        {/* Replace the placeholder with the actual HabitList component */}
+        <HabitList />
       </section>
     </div>
   )
