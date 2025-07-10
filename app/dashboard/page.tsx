@@ -1,8 +1,17 @@
-// app/dashboard/page.tsx - Simple version following the guide exactly
+// app/dashboard/page.tsx - Updated with DailyHabitView
 
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
-import HabitList from '@/components/HabitList'
+import DailyHabitView from '@/components/DailyHabitView'
+import AddHabitForm from '@/components/AddHabitForm'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Plus } from 'lucide-react'
 
 export default async function DashboardPage() {
   // Authentication check
@@ -15,16 +24,32 @@ export default async function DashboardPage() {
 
   return (
     <div className='container mx-auto px-4 py-8'>
-      <div className='mb-6 flex items-center justify-between'>
+      <div className='mb-6'>
         <h1 className='text-3xl font-bold'>Your Habits</h1>
-        {/* Placeholder: Add Habit Button will likely go here */}
-        {/* <AddHabitButton /> */}
+        <p className='text-muted-foreground mt-2'>
+          Track your daily habits and build lasting routines
+        </p>
       </div>
 
-      {/* Section for displaying the list of habits */}
+      {/* Add Habit Form Section */}
+      <Card className='mb-8'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2'>
+            <Plus className='h-5 w-5' />
+            Add New Habit
+          </CardTitle>
+          <CardDescription>
+            Create a new habit to start tracking your progress
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AddHabitForm />
+        </CardContent>
+      </Card>
+
+      {/* Section for displaying the list of habits with full functionality */}
       <section>
-        {/* Replace the placeholder with the actual HabitList component */}
-        <HabitList />
+        <DailyHabitView />
       </section>
     </div>
   )
