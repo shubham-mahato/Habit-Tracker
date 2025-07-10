@@ -66,6 +66,16 @@ export type EditHabitState = {
   } | null
 }
 
+// --- NEW: Delete Habit State Type ---
+export type DeleteHabitState = {
+  success: boolean
+  message?: string | null
+  errors?: {
+    habitId?: string[]
+    _form?: string[] // For general errors (auth, permission, db)
+  } | null
+}
+
 // --- Helper Functions for Date ---
 function getStartOfDayUTC(date: Date): Date {
   const start = new Date(date)
@@ -95,6 +105,117 @@ export type ToggleHabitState = {
     completed?: string[]
     _form?: string[] // General errors like auth, db, permissions
   } | null
+}
+
+/**
+ * deleteHabit Server Action
+ *
+ * Deletes a specified habit and its associated records after performing
+ * authentication and authorization checks. Relies on cascading deletes
+ * defined in the Prisma schema for removing related HabitRecord entries.
+ *
+ * @param habitId The ID of the habit to delete.
+ * @returns Promise<DeleteHabitState> Result object indicating success/failure.
+ */
+export async function deleteHabit(habitId: string): Promise<DeleteHabitState> {
+  console.log(`Attempting to delete habit ID: ${habitId}`)
+
+  // --- 1. Authentication ---
+  let userId: string | null = null
+  try {
+    const { userId: clerkUserId } = await auth()
+    if (!clerkUserId) {
+      throw new Error('User not authenticated.')
+    }
+    userId = clerkUserId
+  } catch (error) {
+    console.error('Authentication Error in deleteHabit:', error)
+    return {
+      success: false,
+      message: 'Authentication failed.',
+      errors: { _form: ['User authentication failed.'] },
+    }
+  }
+
+  // --- 2. Validate Habit ID ---
+  if (!habitId || typeof habitId !== 'string') {
+    console.error('Invalid Habit ID provided for deletion:', habitId)
+    return {
+      success: false,
+      message: 'Invalid Habit ID.',
+      errors: { habitId: ['Invalid habit identifier provided.'] },
+    }
+  }
+
+  try {
+    // --- 3. Authorization Check ---
+    // Verify the habit exists and belongs to the current user before deleting
+    const habit = await prisma.habit.findUnique({
+      where: {
+        id: habitId,
+        userId: userId, // CRUCIAL check
+      },
+      select: { id: true, name: true }, // Select name for success message
+    })
+
+    // If habit is null, it means it doesn't exist OR it doesn't belong to this user
+    if (!habit) {
+      console.warn(
+        `Authorization Failed or Habit Not Found: User ${userId} attempted to delete habit ${habitId}`
+      )
+      return {
+        success: false,
+        message: 'Permission Denied or Habit Not Found.',
+        errors: {
+          _form: [
+            'You do not have permission to delete this habit, or it no longer exists.',
+          ],
+        },
+      }
+    }
+
+    const habitName = habit.name // Store name for success message
+    console.log(
+      `Authorization successful for user ${userId} on habit ${habitId} (${habitName}). Proceeding with deletion.`
+    )
+
+    // --- 4. Database Deletion ---
+    // Use Prisma's delete operation
+    // Cascading delete (configured in schema.prisma) should automatically remove related HabitRecord entries
+    await prisma.habit.delete({
+      where: {
+        id: habitId,
+      },
+    })
+
+    console.log(
+      `Habit ${habitId} (${habitName}) and associated records deleted successfully.`
+    )
+
+    // --- 5. Revalidate Cache ---
+    // Ensure the dashboard UI removes the deleted habit
+    revalidatePath('/dashboard')
+    console.log(
+      `Cache revalidated for /dashboard after deleting habit ${habitId}.`
+    )
+
+    // --- 6. Return Success State ---
+    return {
+      success: true,
+      message: `Habit '${habitName}' deleted successfully.`,
+    }
+  } catch (error) {
+    console.error(`Database Error while deleting habit ${habitId}:`, error)
+    return {
+      success: false,
+      message: 'Database Error: Failed to delete habit.',
+      errors: {
+        _form: [
+          'An unexpected error occurred while deleting the habit. Please try again.',
+        ],
+      },
+    }
+  }
 }
 
 /**
