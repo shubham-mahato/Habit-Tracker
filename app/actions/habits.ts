@@ -34,6 +34,38 @@ export type AddHabitFormState = {
   } | null
 }
 
+// --- NEW: Edit Habit Schema and Types ---
+const EditHabitSchema = z.object({
+  name: z
+    .string()
+    .min(1, { message: 'Habit name cannot be empty.' })
+    .max(100, { message: 'Habit name is too long (max 100 characters).' }),
+  description: z
+    .string()
+    .max(500, { message: 'Description is too long (max 500 characters).' })
+    .optional()
+    .nullable(), // Allow null description
+  frequency: z.enum(['daily', 'weekly'], {
+    errorMap: () => ({ message: 'Please select a valid frequency.' }),
+  }),
+})
+
+// Infer type from schema for formData argument
+type EditHabitFormData = z.infer<typeof EditHabitSchema>
+
+// Define the type for the edit habit return value
+export type EditHabitState = {
+  success: boolean
+  message?: string | null
+  errors?: {
+    name?: string[]
+    description?: string[]
+    frequency?: string[]
+    habitId?: string[]
+    _form?: string[] // For general errors (auth, permission, db)
+  } | null
+}
+
 // --- Helper Functions for Date ---
 function getStartOfDayUTC(date: Date): Date {
   const start = new Date(date)
@@ -63,6 +95,136 @@ export type ToggleHabitState = {
     completed?: string[]
     _form?: string[] // General errors like auth, db, permissions
   } | null
+}
+
+/**
+ * editHabit Server Action
+ *
+ * Updates the details of an existing habit in the database after validation
+ * and authorization checks.
+ *
+ * @param habitId The ID of the habit to update.
+ * @param formData The validated form data containing new details.
+ * @returns Promise<EditHabitState> Result object indicating success/failure.
+ */
+export async function editHabit(
+  habitId: string,
+  formData: EditHabitFormData
+): Promise<EditHabitState> {
+  console.log(`Attempting to edit habit ID: ${habitId} with data:`, formData)
+
+  // --- 1. Authentication ---
+  let userId: string | null = null
+  try {
+    const { userId: clerkUserId } = await auth()
+    if (!clerkUserId) {
+      throw new Error('User not authenticated.')
+    }
+    userId = clerkUserId
+  } catch (error) {
+    console.error('Authentication Error in editHabit:', error)
+    return {
+      success: false,
+      message: 'Authentication failed.',
+      errors: { _form: ['User authentication failed.'] },
+    }
+  }
+
+  // --- 2. Validate Habit ID ---
+  if (!habitId || typeof habitId !== 'string') {
+    console.error('Invalid Habit ID provided:', habitId)
+    return {
+      success: false,
+      message: 'Invalid Habit ID.',
+      errors: { habitId: ['Invalid habit identifier provided.'] },
+    }
+  }
+
+  // --- 3. Validate Form Data ---
+  const validation = EditHabitSchema.safeParse(formData)
+
+  if (!validation.success) {
+    console.error(
+      'Server-side Validation Error in editHabit:',
+      validation.error.flatten().fieldErrors
+    )
+    return {
+      success: false,
+      message: 'Invalid form data provided.',
+      errors: validation.error.flatten().fieldErrors,
+    }
+  }
+
+  // Use validated data from here
+  const { name, description, frequency } = validation.data
+
+  try {
+    // --- 4. Authorization Check ---
+    // Verify that the habit exists AND belongs to the current user.
+    const habit = await prisma.habit.findUnique({
+      where: {
+        id: habitId,
+        userId: userId, // CRUCIAL check
+      },
+      select: { id: true }, // Only need to know if it exists and is owned
+    })
+
+    if (!habit) {
+      console.warn(
+        `Authorization Failed: User ${userId} tried to edit habit ${habitId} they don't own or which doesn't exist.`
+      )
+      return {
+        success: false,
+        message: 'Permission Denied or Habit Not Found.',
+        errors: {
+          _form: [
+            'You do not have permission to edit this habit, or it no longer exists.',
+          ],
+        },
+      }
+    }
+
+    console.log(
+      `Authorization successful for user ${userId} on habit ${habitId}.`
+    )
+
+    // --- 5. Database Update ---
+    console.log(`Updating habit ${habitId} in database...`)
+    await prisma.habit.update({
+      where: {
+        id: habitId,
+      },
+      data: {
+        name: name,
+        description: description || null, // Handle empty strings as null
+        frequency: frequency,
+        // Prisma automatically handles `updatedAt` if schema is set up
+      },
+    })
+
+    console.log(`Habit ${habitId} updated successfully.`)
+
+    // --- 6. Revalidate Cache ---
+    revalidatePath('/dashboard')
+    console.log(`Cache revalidated for /dashboard.`)
+
+    // --- 7. Return Success State ---
+    return {
+      success: true,
+      message: `Habit '${name}' updated successfully.`,
+    }
+  } catch (error) {
+    console.error(`Database Error while updating habit ${habitId}:`, error)
+    return {
+      success: false,
+      message: 'Database Error: Failed to update habit.',
+      errors: {
+        _form: [
+          'An unexpected error occurred while saving the habit. Please try again.',
+        ],
+      },
+    }
+  }
 }
 
 /**
