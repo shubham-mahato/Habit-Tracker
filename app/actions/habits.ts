@@ -552,6 +552,26 @@ export async function addHabitWithState(
     console.log(`Attempting to create habit for userId: ${userId}`)
     console.log(`Data: Name=${name}, Desc=${description}, Freq=${frequency}`)
 
+    // ⭐ NEW: First, ensure the user exists in the database
+    await prisma.user.upsert({
+      where: {
+        id: userId,
+      },
+      update: {
+        // Don't update anything if user exists
+      },
+      create: {
+        id: userId,
+        email: `${userId}@clerk.user`, // Fallback email
+        name: null,
+        emailVerified: null,
+        image: null,
+      },
+    })
+
+    console.log(`User record ensured for userId: ${userId}`)
+
+    // Now create the habit
     await prisma.habit.create({
       data: {
         userId: userId,

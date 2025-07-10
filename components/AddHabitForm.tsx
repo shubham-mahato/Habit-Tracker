@@ -3,7 +3,10 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { useFormState, useFormStatus } from 'react-dom'
+import { useFormStatus } from 'react-dom'
+
+// Use React's experimental hook for React 19
+const useActionState = React.experimental_useActionState || React.useActionState
 
 // ShadCN UI Components
 import { Label } from '@/components/ui/label'
@@ -60,7 +63,7 @@ export default function AddHabitForm({
 }: {
   onFormSubmitSuccess?: () => void
 }) {
-  const [state, formAction] = useFormState(addHabitWithState, initialState)
+  const [state, formAction] = useActionState(addHabitWithState, initialState)
   const formRef = useRef<HTMLFormElement>(null) // Ref for resetting the form
 
   // Use useEffect to react to state changes and show toasts
@@ -164,7 +167,7 @@ export default function AddHabitForm({
       {state.errors?._form && (
         <div className='text-destructive bg-destructive/10 rounded-md p-3 text-sm font-medium'>
           <ul>
-            {state.errors._form.map((error, index) => (
+            {state.errors._form.map((error: string, index: number) => (
               <li key={index}>{error}</li>
             ))}
           </ul>
