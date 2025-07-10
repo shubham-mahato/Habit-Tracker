@@ -45,10 +45,9 @@ export default function EditHabitDialog({
   }
 
   // Function to handle successful form submission (closes dialog)
-  const handleSuccessfulSubmit = async () => {
-    // This logic will run *after* the Server Action in EditHabitForm succeeds
-    console.log('Edit successful, closing dialog.')
-    handleCloseDialog()
+  const handleSuccessfulSubmit = () => {
+    console.log('Dialog knows edit was successful.')
+    handleCloseDialog() // Close the dialog
   }
 
   return (

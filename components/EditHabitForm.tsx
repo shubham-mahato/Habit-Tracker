@@ -1,9 +1,10 @@
-// components/EditHabitForm.tsx
+// src/components/EditHabitForm.tsx
 
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useTransition } from 'react'
 import { z } from 'zod'
+import { toast } from 'sonner' // For feedback
 
 // Import ShadCN components
 import { Input } from '@/components/ui/input'
@@ -17,25 +18,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Loader2 } from 'lucide-react' // For loading indicator
 
-// Import Prisma types for the habit prop
+// Import Prisma type and the Server Action
 import type { Habit } from '@prisma/client'
+import { editHabit, EditHabitState } from '@/app/actions/habits'
 
 // Define props for the form
 interface EditHabitFormProps {
   habit: Habit // The habit object to pre-fill the form
-  onFormSubmit?: () => Promise<void> // For future Server Action integration
+  onFormSubmit?: () => void // Function to call on successful submission
   onCancel?: () => void // To close dialog from within form
 }
 
-// Define validation schema
-const formSchema = z.object({
-  name: z.string().min(1, 'Habit name cannot be empty.'),
-  description: z.string().optional(),
-  frequency: z.enum(['daily', 'weekly']), // Match your Prisma enum/type
+// Define the Zod schema (should match the one in the Server Action)
+const EditHabitSchema = z.object({
+  name: z.string().min(1, { message: 'Habit name cannot be empty.' }).max(100),
+  description: z.string().max(500).optional().nullable(),
+  frequency: z.enum(['daily', 'weekly'], {
+    errorMap: () => ({ message: 'Please select a valid frequency.' }),
+  }),
 })
 
-type FormData = z.infer<typeof formSchema>
+type EditHabitFormData = z.infer<typeof EditHabitSchema>
+
+// Define type for form errors matching Zod's flattened errors
+type FormErrors = z.ZodFormattedError<EditHabitFormData, string> | null
 
 /**
  * EditHabitForm Client Component
@@ -43,16 +51,23 @@ type FormData = z.infer<typeof formSchema>
  * Renders the form fields for editing a habit, pre-filled with existing data.
  * Manages the form's input state.
  */
-export default function EditHabitForm({ habit, onCancel }: EditHabitFormProps) {
+export default function EditHabitForm({
+  habit,
+  onFormSubmit,
+  onCancel,
+}: EditHabitFormProps) {
+  // Use useTransition for pending state
+  const [isPending, startTransition] = useTransition()
+
   // --- State Management ---
   // Initialize form state with the habit data passed via props
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState<EditHabitFormData>({
     name: habit.name,
     description: habit.description ?? '', // Handle null description
     frequency: habit.frequency as 'daily' | 'weekly', // Ensure type matches
   })
-  const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  const [isSubmitting, setIsSubmitting] = useState(false) // For loading state
+  // State specifically for Zod validation errors
+  const [errors, setErrors] = useState<FormErrors>(null)
 
   // --- Input Change Handler ---
   const handleChange = (
@@ -61,66 +76,101 @@ export default function EditHabitForm({ habit, onCancel }: EditHabitFormProps) {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
     // Clear errors for the field being edited
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: undefined }))
+    if (errors?.[name as keyof EditHabitFormData]?._errors) {
+      setErrors((prev) => {
+        if (!prev) return null
+        const newErrors = { ...prev }
+        delete newErrors[name as keyof EditHabitFormData]
+        return newErrors
+      })
     }
   }
 
   // --- Select Change Handler ---
   const handleFrequencyChange = (value: 'daily' | 'weekly') => {
     setFormData((prev) => ({ ...prev, frequency: value }))
-    if (errors.frequency) {
-      setErrors((prev) => ({ ...prev, frequency: undefined }))
+    if (errors?.frequency?._errors) {
+      setErrors((prev) => {
+        if (!prev) return null
+        const newErrors = { ...prev }
+        delete newErrors.frequency
+        return newErrors
+      })
     }
   }
 
-  // --- Form Submission Handler (Placeholder for now) ---
+  // --- Form Submission Handler ---
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setIsSubmitting(true)
-    setErrors({}) // Clear previous errors
+    setErrors(null) // Clear previous errors
 
-    try {
-      // Validate form data
-      const validatedData = formSchema.parse(formData)
+    // --- Client-side Validation ---
+    const validation = EditHabitSchema.safeParse(formData)
 
-      console.log('Form submitted with data:', validatedData)
-      console.log('Original Habit ID:', habit.id)
-
-      // !!! IMPORTANT !!!
-      // In future tasks, this function will:
-      // 1. Call the `editHabit` Server Action, passing `habit.id` and `validatedData`.
-      // 2. Handle the response (success/error) from the Server Action.
-      // 3. Show feedback (e.g., toasts).
-      // 4. Call a prop function to close the dialog on success.
-
-      // Placeholder delay to simulate action
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Example: If successful, close the dialog
-      if (onCancel) onCancel()
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        // Handle validation errors
-        const formattedErrors: Record<string, string> = {}
-        error.errors.forEach((err) => {
-          if (err.path) {
-            formattedErrors[err.path[0]] = err.message
-          }
-        })
-        setErrors(formattedErrors)
-      } else {
-        console.error('Form submission error:', error)
-      }
-    } finally {
-      setIsSubmitting(false)
+    if (!validation.success) {
+      const zodErrors = validation.error.format()
+      setErrors(zodErrors)
+      toast.error('Please check the form for errors.')
+      console.error('Client-side validation failed:', zodErrors)
+      return // Stop submission if validation fails
     }
+
+    // --- Call Server Action ---
+    startTransition(async () => {
+      try {
+        console.log(
+          `Calling editHabit for ID: ${habit.id} with data:`,
+          validation.data
+        )
+        const result: EditHabitState = await editHabit(
+          habit.id,
+          validation.data
+        )
+
+        if (result.success) {
+          toast.success(result.message || 'Habit updated successfully!')
+          // Call the callback prop to close the dialog (if provided)
+          if (onFormSubmit) {
+            onFormSubmit()
+          }
+        } else {
+          // Handle errors returned from the server action
+          toast.error(result.message || 'Failed to update habit.')
+          if (result.errors) {
+            // Map server errors back to the form fields if possible
+            const serverErrors: FormErrors = {
+              _errors: result.errors._form || [],
+            }
+            if (result.errors.name)
+              serverErrors.name = { _errors: result.errors.name }
+            if (result.errors.description)
+              serverErrors.description = { _errors: result.errors.description }
+            if (result.errors.frequency)
+              serverErrors.frequency = { _errors: result.errors.frequency }
+            setErrors(serverErrors)
+            console.error('Server action failed:', result.errors)
+          }
+        }
+      } catch (error) {
+        // Catch unexpected errors during the action call
+        console.error('Error submitting edit form:', error)
+        toast.error('An unexpected error occurred. Please try again.')
+        setErrors({ _errors: ['An unexpected error occurred.'] })
+      }
+    })
+  }
+
+  // Helper to get error message for a field
+  const getFieldError = (
+    fieldName: keyof EditHabitFormData
+  ): string | undefined => {
+    return errors?.[fieldName]?._errors[0]
   }
 
   return (
     <form onSubmit={handleSubmit} className='grid gap-4 py-4'>
       {/* Name Field */}
-      <div className='grid grid-cols-4 items-center gap-4'>
+      <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
         <Label htmlFor='name' className='text-right'>
           Name
         </Label>
@@ -130,49 +180,49 @@ export default function EditHabitForm({ habit, onCancel }: EditHabitFormProps) {
           value={formData.name}
           onChange={handleChange}
           className='col-span-3'
-          aria-invalid={!!errors.name}
-          aria-describedby={errors.name ? 'name-error' : undefined}
+          aria-invalid={!!getFieldError('name')}
+          aria-describedby={getFieldError('name') ? 'name-error' : undefined}
           required
         />
-        {errors.name && (
+        {getFieldError('name') && (
           <p
             id='name-error'
-            className='text-destructive col-span-4 text-right text-sm'
+            className='text-destructive col-span-3 col-start-2 text-sm'
           >
-            {errors.name}
+            {getFieldError('name')}
           </p>
         )}
       </div>
 
       {/* Description Field */}
-      <div className='grid grid-cols-4 items-start gap-4'>
+      <div className='grid grid-cols-4 items-start gap-x-4 gap-y-1'>
         <Label htmlFor='description' className='pt-2 text-right'>
           Description
         </Label>
         <Textarea
           id='description'
           name='description'
-          value={formData.description}
+          value={formData.description ?? ''}
           onChange={handleChange}
           placeholder='(Optional) Add more details...'
           className='col-span-3 min-h-[80px]'
-          aria-invalid={!!errors.description}
+          aria-invalid={!!getFieldError('description')}
           aria-describedby={
-            errors.description ? 'description-error' : undefined
+            getFieldError('description') ? 'description-error' : undefined
           }
         />
-        {errors.description && (
+        {getFieldError('description') && (
           <p
             id='description-error'
-            className='text-destructive col-span-4 text-right text-sm'
+            className='text-destructive col-span-3 col-start-2 text-sm'
           >
-            {errors.description}
+            {getFieldError('description')}
           </p>
         )}
       </div>
 
       {/* Frequency Field */}
-      <div className='grid grid-cols-4 items-center gap-4'>
+      <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
         <Label htmlFor='frequency' className='text-right'>
           Frequency
         </Label>
@@ -185,7 +235,7 @@ export default function EditHabitForm({ habit, onCancel }: EditHabitFormProps) {
           <SelectTrigger
             id='frequency'
             className='col-span-3'
-            aria-invalid={!!errors.frequency}
+            aria-invalid={!!getFieldError('frequency')}
           >
             <SelectValue placeholder='Select frequency' />
           </SelectTrigger>
@@ -195,25 +245,44 @@ export default function EditHabitForm({ habit, onCancel }: EditHabitFormProps) {
             {/* Add other frequencies if your schema supports them */}
           </SelectContent>
         </Select>
-        {errors.frequency && (
+        {getFieldError('frequency') && (
           <p
             id='frequency-error'
-            className='text-destructive col-span-4 text-right text-sm'
+            className='text-destructive col-span-3 col-start-2 text-sm'
           >
-            {errors.frequency}
+            {getFieldError('frequency')}
           </p>
         )}
       </div>
 
+      {/* General Form Errors */}
+      {errors?._errors && errors._errors.length > 0 && (
+        <div className='text-destructive bg-destructive/10 col-span-4 rounded-md p-2 text-sm'>
+          {errors._errors.join(', ')}
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className='flex justify-end gap-2 pt-4'>
         {onCancel && (
-          <Button type='button' variant='ghost' onClick={onCancel}>
+          <Button
+            type='button'
+            variant='ghost'
+            onClick={onCancel}
+            disabled={isPending}
+          >
             Cancel
           </Button>
         )}
-        <Button type='submit' disabled={isSubmitting}>
-          {isSubmitting ? 'Saving...' : 'Save Changes'}
+        <Button type='submit' disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+              Saving...
+            </>
+          ) : (
+            'Save Changes'
+          )}
         </Button>
       </div>
     </form>
