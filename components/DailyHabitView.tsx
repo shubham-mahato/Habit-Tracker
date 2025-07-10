@@ -14,11 +14,12 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 
 // Import components
 import HabitHeatmap from './HabitHeatmap'
 import EditHabitDialog from './EditHabitDialog'
+import DeleteHabitButton from './DeleteHabitButton'
 
 // --- Helper Functions for Date Range ---
 function getStartOfDayUTC(date: Date): Date {
@@ -197,14 +198,8 @@ export default async function DailyHabitView() {
                 </Button>
               </EditHabitDialog>
 
-              {/* Delete Button - Placeholder for now */}
-              <Button
-                variant='destructive'
-                size='icon'
-                aria-label={`Delete habit: ${habit.name}`}
-              >
-                <Trash2 className='h-4 w-4' />
-              </Button>
+              {/* Delete Button with Confirmation Dialog */}
+              <DeleteHabitButton habitId={habit.id} habitName={habit.name} />
             </CardFooter>
           </Card>
         )
