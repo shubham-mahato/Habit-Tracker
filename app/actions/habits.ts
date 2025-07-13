@@ -381,142 +381,6 @@ export async function editHabit(
 }
 
 /**
- * toggleHabitCompletion Server Action
- *
- * Finds or creates a HabitRecord for a given habit and date, setting its
- * completion status based on the provided 'completed' value.
- * Ensures the habit belongs to the authenticated user.
- *
- * @param habitId The ID of the habit to update.
- * @param date The specific date (will be normalized to start of day UTC).
- * @param completed The new intended completion state (true or false).
- * @returns Promise<ToggleHabitState> Result object indicating success/failure.
- */
-export async function toggleHabitCompletion(
-  habitId: string,
-  date: Date,
-  completed: boolean
-): Promise<ToggleHabitState> {
-  // --- 1. Authentication ---
-  let userId: string | null = null
-  try {
-    const { userId: clerkUserId } = await auth()
-    if (!clerkUserId) {
-      throw new Error('User not authenticated.')
-    }
-    userId = clerkUserId
-  } catch (error) {
-    console.error('Authentication Error in toggleHabitCompletion:', error)
-    return {
-      success: false,
-      message: 'Authentication Error.',
-      errors: { _form: ['User authentication failed.'] },
-    }
-  }
-
-  // --- 2. Input Validation ---
-  const validation = ToggleHabitSchema.safeParse({ habitId, date, completed })
-
-  if (!validation.success) {
-    console.error('Validation Error:', validation.error.flatten().fieldErrors)
-    return {
-      success: false,
-      message: 'Invalid input data.',
-      errors: validation.error.flatten().fieldErrors,
-    }
-  }
-
-  // Use validated data from here on
-  const {
-    habitId: validHabitId,
-    date: validDate,
-    completed: newCompletedState,
-  } = validation.data
-
-  // Normalize date to the start of the day in UTC for consistency
-  const targetDateStart = getStartOfDayUTC(validDate)
-
-  try {
-    // --- 3. Authorization Check ---
-    // Verify that the habit being modified actually belongs to the logged-in user.
-    const habit = await prisma.habit.findUnique({
-      where: {
-        id: validHabitId,
-        userId: userId, // Ensure the user owns the habit
-      },
-      select: { id: true }, // We only need to confirm existence and ownership
-    })
-
-    // If habit is null, it means either it doesn't exist OR it doesn't belong to this user.
-    if (!habit) {
-      console.warn(
-        `Authorization Failed or Habit Not Found: User ${userId} attempted to toggle habit ${validHabitId}`
-      )
-      return {
-        success: false,
-        message: 'Permission Denied or Habit Not Found.',
-        errors: {
-          _form: [
-            'You do not have permission to update this habit, or the habit does not exist.',
-          ],
-        },
-      }
-    }
-
-    // --- 4. Database Logic: Upsert HabitRecord ---
-    console.log(
-      `Upserting HabitRecord: habitId=${validHabitId}, date=${targetDateStart.toISOString()}, completed=${newCompletedState}`
-    )
-
-    const updatedRecord = await prisma.habitRecord.upsert({
-      where: {
-        // Specify the unique index fields
-        habitId_date: {
-          habitId: validHabitId,
-          date: targetDateStart, // Use the normalized UTC start date
-        },
-      },
-      update: {
-        // What to update if the record exists
-        completed: newCompletedState,
-      },
-      create: {
-        // What to create if the record doesn't exist
-        habitId: validHabitId,
-        date: targetDateStart, // Use the normalized UTC start date
-        completed: newCompletedState,
-      },
-    })
-
-    console.log(
-      `Habit record upserted successfully for habit ${validHabitId} on ${targetDateStart.toISOString()}:`,
-      updatedRecord
-    )
-
-    // --- 5. Revalidate Cache ---
-    revalidatePath('/dashboard')
-    console.log(
-      `Cache revalidated for /dashboard after toggling habit ${validHabitId}`
-    )
-
-    // --- 6. Return Success State ---
-    return {
-      success: true,
-      message: `Habit status updated successfully for ${targetDateStart.toLocaleDateString()}.`,
-    }
-  } catch (error) {
-    console.error('Database/Upsert Error in toggleHabitCompletion:', error)
-    return {
-      success: false,
-      message: 'Database Error: Failed to update habit status.',
-      errors: {
-        _form: ['An unexpected database error occurred. Please try again.'],
-      },
-    }
-  }
-}
-
-/**
  * addHabit Server Action for useFormState
  *
  * Handles the submission of the 'Add New Habit' form with state return.
@@ -924,5 +788,98 @@ export async function getUserCategories() {
   } catch (error) {
     console.error('Error fetching user categories:', error)
     return []
+  }
+}
+
+/**
+ * toggleHabitCompletion Server Action
+ * Toggles the completion status of a habit for a specific date
+ */
+export async function toggleHabitCompletion({
+  habitId,
+  date,
+  completed,
+}: {
+  habitId: string
+  date: string // YYYY-MM-DD format
+  completed: boolean
+}) {
+  console.log(
+    `Toggling habit ${habitId} completion for ${date} to ${completed}`
+  )
+
+  // --- 1. Authentication ---
+  let userId: string | null = null
+  try {
+    const { userId: clerkUserId } = await auth()
+    if (!clerkUserId) {
+      return {
+        success: false,
+        message: 'User not authenticated.',
+      }
+    }
+    userId = clerkUserId
+  } catch (error) {
+    console.error('Authentication Error in toggleHabitCompletion:', error)
+    return {
+      success: false,
+      message: 'Authentication failed.',
+    }
+  }
+
+  try {
+    // --- 2. Verify Habit Ownership ---
+    const habit = await prisma.habit.findFirst({
+      where: {
+        id: habitId,
+        userId: userId,
+      },
+    })
+
+    if (!habit) {
+      return {
+        success: false,
+        message: 'Habit not found or unauthorized.',
+      }
+    }
+
+    // --- 3. Parse and Normalize Date ---
+    const recordDate = new Date(date + 'T00:00:00.000Z') // Parse as UTC date
+
+    // --- 4. Upsert Habit Record ---
+    const habitRecord = await prisma.habitRecord.upsert({
+      where: {
+        habitId_date: {
+          habitId: habitId,
+          date: recordDate,
+        },
+      },
+      update: {
+        completed: completed,
+        updatedAt: new Date(),
+      },
+      create: {
+        habitId: habitId,
+        date: recordDate,
+        completed: completed,
+      },
+    })
+
+    console.log(`Habit record updated successfully:`, habitRecord)
+
+    // --- 5. Revalidate Cache ---
+    revalidatePath('/dashboard')
+
+    return {
+      success: true,
+      message: `Habit ${completed ? 'completed' : 'uncompleted'} successfully.`,
+      data: habitRecord,
+    }
+  } catch (error) {
+    console.error('Database Error in toggleHabitCompletion:', error)
+    return {
+      success: false,
+      message: 'Failed to update habit completion.',
+    }
   }
 }

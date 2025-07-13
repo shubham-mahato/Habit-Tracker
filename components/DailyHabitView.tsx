@@ -23,6 +23,7 @@ import type { Category, Habit, HabitRecord, Prisma } from '@prisma/client'
 import HabitHeatmap from './HabitHeatmap'
 import EditHabitDialog from './EditHabitDialog'
 import DeleteHabitButton from './DeleteHabitButton'
+import HabitCheckbox from './HabitCheckbox'
 
 // Import helper and streak calculation function from streaks utility
 import { calculateStreaks, StreakResult } from '@/lib/streaks'
@@ -251,18 +252,12 @@ export default async function DailyHabitView({
 
               {/* Daily Tracking Status */}
               <div className='mt-auto pt-4'>
-                <div
-                  className={`flex h-10 items-center justify-center rounded border text-xs ${
-                    isCompletedToday
-                      ? 'border-green-300 bg-green-100 dark:border-green-700 dark:bg-green-900/30'
-                      : 'bg-muted/30'
-                  }`}
-                >
-                  Status: {isCompletedToday ? '✅ Done' : '⬜ Pending'}
-                  <span className='text-muted-foreground ml-2'>
-                    (Checkbox/Button Placeholder)
-                  </span>
-                </div>
+                <HabitCheckbox
+                  habitId={habit.id}
+                  habitName={habit.name}
+                  date={new Date()}
+                  initialCompleted={isCompletedToday}
+                />
               </div>
 
               {/* Progress heatmap visualization */}
