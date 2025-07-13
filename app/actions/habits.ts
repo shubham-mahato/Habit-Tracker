@@ -41,6 +41,23 @@ export type AddHabitFormState = {
   } | null
 }
 
+const CreateCategorySchema = z.object({
+  name: z
+    .string()
+    .min(1, { message: 'Category name cannot be empty.' })
+    .max(50, { message: 'Category name is too long (max 50 characters).' })
+    .trim(),
+})
+
+export type CreateCategoryState = {
+  success: boolean
+  message?: string | null
+  errors?: {
+    name?: string[]
+    _form?: string[]
+  } | null
+}
+
 // --- NEW: Edit Habit Schema and Types ---
 const EditHabitSchema = z.object({
   name: z

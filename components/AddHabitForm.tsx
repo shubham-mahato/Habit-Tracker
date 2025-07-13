@@ -3,10 +3,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { useFormStatus } from 'react-dom'
-
-// Use React's experimental hook for React 19
-const useActionState = React.experimental_useActionState || React.useActionState
+import { useFormState, useFormStatus } from 'react-dom'
 
 // ShadCN UI Components
 import { Label } from '@/components/ui/label'
@@ -24,6 +21,9 @@ import { Loader2 } from 'lucide-react'
 
 // Import the Server Action AND the State Type
 import { addHabitWithState, type AddHabitFormState } from '@/app/actions/habits'
+
+// Import types for categories
+import type { Category } from '@prisma/client'
 
 // Import the toast function from sonner
 import { toast } from 'sonner'
@@ -60,10 +60,12 @@ const initialState: AddHabitFormState = {
 // --- Main Form Component ---
 export default function AddHabitForm({
   onFormSubmitSuccess,
+  categories = [], // NEW: Accept categories array with default empty array
 }: {
   onFormSubmitSuccess?: () => void
+  categories?: Category[] // NEW: Optional categories prop
 }) {
-  const [state, formAction] = useActionState(addHabitWithState, initialState)
+  const [state, formAction] = useFormState(addHabitWithState, initialState)
   const formRef = useRef<HTMLFormElement>(null) // Ref for resetting the form
 
   // Use useEffect to react to state changes and show toasts
@@ -158,6 +160,38 @@ export default function AddHabitForm({
             className='text-destructive text-sm font-medium'
           >
             {state.errors.frequency.join(', ')}
+          </p>
+        )}
+      </div>
+
+      {/* --- NEW: Category Field --- */}
+      <div className='space-y-1'>
+        <Label htmlFor='categoryId'>Category (Optional)</Label>
+        <Select name='categoryId' defaultValue=''>
+          <SelectTrigger
+            id='categoryId'
+            aria-describedby={
+              state.errors?.categoryId ? 'categoryId-error' : undefined
+            }
+          >
+            <SelectValue placeholder='Select a category (optional)' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value=''>No Category</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* Display validation errors for the 'categoryId' field */}
+        {state.errors?.categoryId && (
+          <p
+            id='categoryId-error'
+            className='text-destructive text-sm font-medium'
+          >
+            {state.errors.categoryId.join(', ')}
           </p>
         )}
       </div>

@@ -1,9 +1,12 @@
-// app/dashboard/page.tsx - Updated with DailyHabitView
+// app/dashboard/page.tsx - Updated with DailyHabitView and categories
 
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import DailyHabitView from '@/components/DailyHabitView'
 import AddHabitForm from '@/components/AddHabitForm'
+import CategoryManagement from '@/components/CategoryManagement'
+import { prisma } from '@/lib/prisma'
+import type { Category } from '@prisma/client'
 import {
   Card,
   CardContent,
@@ -22,6 +25,22 @@ export default async function DashboardPage() {
     redirect('/sign-in')
   }
 
+  // Fetch user categories for the forms
+  let userCategories: Category[] = []
+  try {
+    userCategories = await prisma.category.findMany({
+      where: {
+        userId: userId,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching categories:', error)
+    // Continue without categories if there's an error
+  }
+
   return (
     <div className='container mx-auto px-4 py-8'>
       <div className='mb-6'>
@@ -30,6 +49,9 @@ export default async function DashboardPage() {
           Track your daily habits and build lasting routines
         </p>
       </div>
+
+      {/* Category Management Section */}
+      <CategoryManagement categories={userCategories} />
 
       {/* Add Habit Form Section */}
       <Card className='mb-8'>
@@ -43,7 +65,7 @@ export default async function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AddHabitForm />
+          <AddHabitForm categories={userCategories} />
         </CardContent>
       </Card>
 
