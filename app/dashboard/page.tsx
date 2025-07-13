@@ -1,4 +1,4 @@
-// app/dashboard/page.tsx - Updated with CategoryFilter
+// app/dashboard/page.tsx - Updated with CategoryFilter and Responsive Design
 
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
@@ -61,42 +61,50 @@ export default async function DashboardPage({
   }
 
   return (
-    <div className='container mx-auto px-4 py-8'>
-      <div className='mb-6'>
-        <h1 className='text-3xl font-bold'>Your Habits</h1>
-        <p className='text-muted-foreground mt-2'>
+    <main className='container mx-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6'>
+      {/* Page Header */}
+      <div className='mb-4 sm:mb-6'>
+        <h1 className='text-xl font-bold sm:text-2xl lg:text-3xl'>
+          Your Habits
+        </h1>
+        <p className='text-muted-foreground mt-1 text-sm sm:mt-2 sm:text-base'>
           Track your daily habits and build lasting routines
         </p>
       </div>
 
       {/* Category Management Section */}
-      <CategoryManagement categories={userCategories} />
+      <div className='mb-4 sm:mb-6'>
+        <CategoryManagement categories={userCategories} />
+      </div>
 
       {/* Add Habit Form Section */}
-      <Card className='mb-8'>
-        <CardHeader>
-          <CardTitle className='flex items-center gap-2'>
-            <Plus className='h-5 w-5' />
+      <Card className='mb-4 sm:mb-6 lg:mb-8'>
+        <CardHeader className='p-4 sm:p-6'>
+          <CardTitle className='flex items-center gap-2 text-base sm:text-lg'>
+            <Plus className='h-4 w-4 sm:h-5 sm:w-5' />
             Add New Habit
           </CardTitle>
-          <CardDescription>
+          <CardDescription className='text-xs sm:text-sm'>
             Create a new habit to start tracking your progress
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className='p-4 pt-0 sm:p-6'>
           <AddHabitForm categories={userCategories} />
         </CardContent>
       </Card>
 
-      {/* NEW: Category Filter Section */}
-      <div className='mb-6'>
+      {/* Category Filter Section */}
+      <div className='mb-4 sm:mb-6'>
         <CategoryFilter categories={userCategories} />
       </div>
 
-      {/* Section for displaying the list of habits with full functionality */}
-      <section>
+      {/* Habits Display Section */}
+      <section aria-labelledby='habits-section-title'>
+        <h2 id='habits-section-title' className='sr-only'>
+          Your Habit List
+        </h2>
         <DailyHabitView currentCategoryFilter={currentCategoryFilter} />
       </section>
-    </div>
+    </main>
   )
 }

@@ -249,17 +249,14 @@ export default async function DailyHabitView({
               ) : (
                 <div className='mb-4'></div>
               )}
-
               {/* Daily Tracking Status */}
-              <div className='mt-auto pt-4'>
-                <HabitCheckbox
-                  habitId={habit.id}
-                  habitName={habit.name}
-                  date={new Date()}
-                  initialCompleted={isCompletedToday}
-                />
-              </div>
 
+              <HabitCheckbox
+                habitId={habit.id}
+                habitName={habit.name}
+                date={new Date()}
+                initialCompleted={isCompletedToday}
+              />
               {/* Progress heatmap visualization */}
               <div className='mt-4 border-t border-dashed pt-4'>
                 <div className='mb-2'>
@@ -269,7 +266,6 @@ export default async function DailyHabitView({
                 </div>
                 <HabitHeatmap habitId={habit.id} habitName={habit.name} />
               </div>
-
               {/* 📊 Enhanced Analytics Display with Completion Percentage */}
               <div className='text-muted-foreground mt-4 space-y-2 border-t pt-4 text-sm'>
                 <div className='flex items-center gap-2'>
