@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Pencil } from 'lucide-react'
+import { Pencil, Flame, Trophy } from 'lucide-react'
 
 // Import types and Prisma
 import type { Category, Habit, HabitRecord, Prisma } from '@prisma/client'
@@ -23,6 +23,9 @@ import type { Category, Habit, HabitRecord, Prisma } from '@prisma/client'
 import HabitHeatmap from './HabitHeatmap'
 import EditHabitDialog from './EditHabitDialog'
 import DeleteHabitButton from './DeleteHabitButton'
+
+// Import helper and streak calculation function from streaks utility
+import { getUTCDate, calculateStreaks, StreakResult } from '@/lib/streaks'
 
 // --- Helper Functions for Date Range ---
 function getStartOfDayUTC(date: Date): Date {
@@ -43,10 +46,10 @@ interface DailyHabitViewProps {
   currentCategoryFilter?: string // Optional category filter prop
 }
 
-// Define type for habits with included relations
+// Update type alias: use 'records' to match Prisma schema relation name
 type HabitWithDetails = Habit & {
-  records: Pick<HabitRecord, 'id' | 'date' | 'completed'>[]
-  category: Category | null // Category can be null
+  records: Pick<HabitRecord, 'id' | 'date' | 'completed'>[] // Match your Prisma schema relation name
+  category: Category | null
 }
 
 /**
@@ -80,9 +83,7 @@ export default async function DailyHabitView({
     const startOfToday = getStartOfDayUTC(today)
     const endOfToday = getEndOfDayUTC(today)
 
-    console.log(
-      `Fetching records between: ${startOfToday.toISOString()} and ${endOfToday.toISOString()}`
-    )
+    console.log(`Fetching all habit records for streak calculation`)
     console.log(
       `Category filter: ${currentCategoryFilter || 'None (All Categories)'}`
     )
@@ -169,13 +170,25 @@ export default async function DailyHabitView({
   }
 
   // --- 4. Render Habit List with Category Information ---
+  // Find today's date for checkbox logic (since we now fetch all records)
+  const startOfSelectedDay = getStartOfDayUTC(new Date())
+
   return (
     <div className='mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
       {habitsWithDetails.map((habit) => {
-        // Access habit data, including the category
-        const todayRecord = habit.records?.[0]
+        // Find today's record from the complete fetched list
+        const todayRecord = habit.records.find(
+          (record) =>
+            getUTCDate(record.date).getTime() === startOfSelectedDay.getTime()
+        )
         const isCompletedToday = todayRecord?.completed ?? false
         const categoryName = habit.category?.name // Access category name
+
+        // 🔥 Calculate streaks using the complete habit history
+        const streaks: StreakResult = calculateStreaks(habit.records)
+
+        // Helper for pluralization
+        const pluralizeDays = (count: number) => (count === 1 ? 'day' : 'days')
 
         return (
           <Card
@@ -225,7 +238,7 @@ export default async function DailyHabitView({
                 </div>
               </div>
 
-              {/* 2. Render the HabitHeatmap component */}
+              {/* Progress heatmap visualization */}
               <div className='mt-4 border-t border-dashed pt-4'>
                 <div className='mb-2'>
                   <h4 className='text-muted-foreground text-sm font-medium'>
@@ -233,6 +246,30 @@ export default async function DailyHabitView({
                   </h4>
                 </div>
                 <HabitHeatmap habitId={habit.id} habitName={habit.name} />
+              </div>
+
+              {/* 🔥 Enhanced Streak Information Display */}
+              <div className='text-muted-foreground mt-4 space-y-2 border-t pt-4 text-sm'>
+                <div className='flex items-center gap-2'>
+                  <Flame className='h-4 w-4 text-orange-500' />
+                  <span>
+                    Current Streak:{' '}
+                    <span className='text-foreground font-medium'>
+                      {streaks.currentStreak}
+                    </span>{' '}
+                    {pluralizeDays(streaks.currentStreak)}
+                  </span>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <Trophy className='h-4 w-4 text-yellow-500' />
+                  <span>
+                    Longest Streak:{' '}
+                    <span className='text-foreground font-medium'>
+                      {streaks.longestStreak}
+                    </span>{' '}
+                    {pluralizeDays(streaks.longestStreak)}
+                  </span>
+                </div>
               </div>
             </CardContent>
 

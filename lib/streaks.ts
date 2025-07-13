@@ -8,7 +8,7 @@ import type { HabitRecord } from '@prisma/client'
  * @param date The input Date object.
  * @returns A new Date object set to midnight UTC for that day.
  */
-function getUTCDate(date: Date): Date {
+export function getUTCDate(date: Date): Date {
   return new Date(
     Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
   )
