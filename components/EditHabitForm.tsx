@@ -4,7 +4,9 @@
 
 import React, { useState, useTransition } from 'react'
 import { z } from 'zod'
-import { toast } from 'sonner'
+import { toast } from 'sonner' // For feedback
+
+// Import ShadCN components
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -16,76 +18,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react' // For loading indicator
+
+// Import Prisma type and the Server Action
 import type { Habit, Category } from '@prisma/client'
 import { editHabit, EditHabitState } from '@/app/actions/habits'
 
 // Define props for the form
 interface EditHabitFormProps {
-  habit: Habit & { categoryId?: string | null }
-  categories: Category[]
-  onFormSubmit?: () => void
-  onCancel?: () => void
+  habit: Habit & { categoryId?: string | null } // Ensure categoryId is available
+  categories: Category[] // NEW: Accept categories array
+  onFormSubmit?: () => void // Function to call on successful submission
+  onCancel?: () => void // To close dialog from within form
 }
 
-// Define the Zod schema
+// Define the Zod schema (should match the one in the Server Action)
 const EditHabitSchema = z.object({
   name: z.string().min(1, { message: 'Habit name cannot be empty.' }).max(100),
   description: z.string().max(500).optional().nullable(),
   frequency: z.enum(['daily', 'weekly'], {
     errorMap: () => ({ message: 'Please select a valid frequency.' }),
   }),
-  categoryId: z.string().optional().nullable(),
+  // NEW: Add optional categoryId validation
+  categoryId: z
+    .string()
+    .cuid({ message: 'Invalid category selected.' })
+    .optional()
+    .nullable(),
 })
 
 type EditHabitFormData = z.infer<typeof EditHabitSchema>
 
-const UNCATEGORIZED_VALUE = 'uncategorized'
+// Define type for form errors matching Zod's flattened errors
+type FormErrors = z.ZodFormattedError<EditHabitFormData, string> | null
 
+/**
+ * EditHabitForm Client Component
+ *
+ * Renders the form fields for editing a habit, pre-filled with existing data.
+ * Manages the form's input state.
+ */
 export default function EditHabitForm({
   habit,
   categories,
   onFormSubmit,
   onCancel,
 }: EditHabitFormProps) {
+  // Use useTransition for pending state
   const [isPending, startTransition] = useTransition()
 
-  // Safely handle categoryId - ensure it's never an empty string
-  const safeCategoryId = habit.categoryId || undefined
-  const selectValue = safeCategoryId || UNCATEGORIZED_VALUE
-
-  console.log('EditHabitForm - habit.categoryId:', habit.categoryId)
-  console.log('EditHabitForm - safeCategoryId:', safeCategoryId)
-  console.log('EditHabitForm - selectValue:', selectValue)
-
+  // --- State Management ---
+  // Initialize form state with the habit data passed via props
   const [formData, setFormData] = useState<EditHabitFormData>({
     name: habit.name,
-    description: habit.description || '',
-    frequency: habit.frequency as 'daily' | 'weekly',
-    categoryId: safeCategoryId,
+    description: habit.description ?? '', // Handle null description
+    frequency: habit.frequency as 'daily' | 'weekly', // Ensure type matches
+    categoryId: habit.categoryId || undefined, // Ensure we don't pass null or empty string
   })
+  // State specifically for Zod validation errors
+  const [errors, setErrors] = useState<FormErrors>(null)
 
-  const [errors, setErrors] = useState<any>(null)
-
+  // --- Input Change Handler ---
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-    if (errors?.[name]) {
-      setErrors((prev: any) => {
+    // Clear errors for the field being edited
+    if (errors?.[name as keyof EditHabitFormData]?._errors) {
+      setErrors((prev) => {
         if (!prev) return null
         const newErrors = { ...prev }
-        delete newErrors[name]
+        delete newErrors[name as keyof EditHabitFormData]
         return newErrors
       })
     }
   }
 
+  // --- Select Change Handler ---
   const handleFrequencyChange = (value: 'daily' | 'weekly') => {
     setFormData((prev) => ({ ...prev, frequency: value }))
-    if (errors?.frequency) {
-      setErrors((prev: any) => {
+    if (errors?.frequency?._errors) {
+      setErrors((prev) => {
         if (!prev) return null
         const newErrors = { ...prev }
         delete newErrors.frequency
@@ -94,12 +108,15 @@ export default function EditHabitForm({
     }
   }
 
+  // NEW: Handler for Category Select
   const handleCategoryChange = (value: string) => {
-    console.log('Category change value:', value)
-    const categoryId = value === UNCATEGORIZED_VALUE ? undefined : value
-    setFormData((prev) => ({ ...prev, categoryId }))
-    if (errors?.categoryId) {
-      setErrors((prev: any) => {
+    // Map "no-category" value back to undefined for schema
+    setFormData((prev) => ({
+      ...prev,
+      categoryId: value === 'no-category' ? undefined : value,
+    }))
+    if (errors?.categoryId?._errors) {
+      setErrors((prev) => {
         if (!prev) return null
         const newErrors = { ...prev }
         delete newErrors.categoryId
@@ -108,51 +125,80 @@ export default function EditHabitForm({
     }
   }
 
+  // --- Form Submission Handler ---
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setErrors(null)
+    setErrors(null) // Clear previous errors
 
+    // --- Client-side Validation ---
     const validation = EditHabitSchema.safeParse({
       ...formData,
-      categoryId: formData.categoryId || null,
+      // Ensure categoryId is null if undefined or "no-category" before validation
+      categoryId:
+        formData.categoryId === 'no-category'
+          ? null
+          : formData.categoryId || null,
     })
 
     if (!validation.success) {
-      console.error('Validation Error:', validation.error.flatten().fieldErrors)
-      setErrors(validation.error.flatten().fieldErrors)
-      return
+      const zodErrors = validation.error.format()
+      setErrors(zodErrors)
+      toast.error('Please check the form for errors.')
+      console.error('Client-side validation failed:', zodErrors)
+      return // Stop submission if validation fails
     }
 
+    // --- Call Server Action ---
     startTransition(async () => {
       try {
+        console.log(
+          `Calling editHabit for ID: ${habit.id} with data:`,
+          validation.data
+        )
         const result: EditHabitState = await editHabit(
           habit.id,
           validation.data
         )
+
         if (result.success) {
           toast.success(result.message || 'Habit updated successfully!')
-          onFormSubmit?.()
+          // Call the callback prop to close the dialog (if provided)
+          if (onFormSubmit) {
+            onFormSubmit()
+          }
         } else {
-          toast.error(result.message || 'Failed to update habit')
+          // Handle errors returned from the server action
+          toast.error(result.message || 'Failed to update habit.')
           if (result.errors) {
-            setErrors(result.errors)
+            // Map server errors back to the form fields if possible
+            const serverErrors: FormErrors = {
+              _errors: result.errors._form || [],
+            }
+            if (result.errors.name)
+              serverErrors.name = { _errors: result.errors.name }
+            if (result.errors.description)
+              serverErrors.description = { _errors: result.errors.description }
+            if (result.errors.frequency)
+              serverErrors.frequency = { _errors: result.errors.frequency }
+            setErrors(serverErrors)
+            console.error('Server action failed:', result.errors)
           }
         }
       } catch (error) {
-        console.error('Unexpected Error:', error)
-        toast.error('An unexpected error occurred')
+        // Catch unexpected errors during the action call
+        console.error('Error submitting edit form:', error)
+        toast.error('An unexpected error occurred. Please try again.')
+        setErrors({ _errors: ['An unexpected error occurred.'] })
       }
     })
   }
 
+  // Helper to get error message for a field
   const getFieldError = (
     fieldName: keyof EditHabitFormData
   ): string | undefined => {
-    return errors?.[fieldName]?.[0]
+    return errors?.[fieldName]?._errors[0]
   }
-
-  // Safe select value for rendering
-  const currentSelectValue = formData.categoryId || UNCATEGORIZED_VALUE
 
   return (
     <form onSubmit={handleSubmit} className='grid gap-4 py-4'>
@@ -168,6 +214,8 @@ export default function EditHabitForm({
           onChange={handleChange}
           className='col-span-3'
           aria-invalid={!!getFieldError('name')}
+          aria-describedby={getFieldError('name') ? 'name-error' : undefined}
+          required
         />
         {getFieldError('name') && (
           <p
@@ -180,18 +228,21 @@ export default function EditHabitForm({
       </div>
 
       {/* Description Field */}
-      <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
-        <Label htmlFor='description' className='text-right'>
+      <div className='grid grid-cols-4 items-start gap-x-4 gap-y-1'>
+        <Label htmlFor='description' className='pt-2 text-right'>
           Description
         </Label>
         <Textarea
           id='description'
           name='description'
-          value={formData.description}
+          value={formData.description ?? ''}
           onChange={handleChange}
-          className='col-span-3'
-          rows={3}
+          placeholder='(Optional) Add more details...'
+          className='col-span-3 min-h-[80px]'
           aria-invalid={!!getFieldError('description')}
+          aria-describedby={
+            getFieldError('description') ? 'description-error' : undefined
+          }
         />
         {getFieldError('description') && (
           <p
@@ -209,8 +260,10 @@ export default function EditHabitForm({
           Frequency
         </Label>
         <Select
+          name='frequency'
           value={formData.frequency}
           onValueChange={handleFrequencyChange}
+          required
         >
           <SelectTrigger
             id='frequency'
@@ -222,6 +275,7 @@ export default function EditHabitForm({
           <SelectContent>
             <SelectItem value='daily'>Daily</SelectItem>
             <SelectItem value='weekly'>Weekly</SelectItem>
+            {/* Add other frequencies if your schema supports them */}
           </SelectContent>
         </Select>
         {getFieldError('frequency') && (
@@ -234,12 +288,16 @@ export default function EditHabitForm({
         )}
       </div>
 
-      {/* Category Field */}
+      {/* --- NEW: Category Field --- */}
       <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
         <Label htmlFor='categoryId' className='text-right'>
           Category
         </Label>
-        <Select value={currentSelectValue} onValueChange={handleCategoryChange}>
+        <Select
+          name='categoryId'
+          value={formData.categoryId ?? ''}
+          onValueChange={handleCategoryChange}
+        >
           <SelectTrigger
             id='categoryId'
             className='col-span-3'
@@ -248,7 +306,7 @@ export default function EditHabitForm({
             <SelectValue placeholder='Select a category (optional)' />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={UNCATEGORIZED_VALUE}>No Category</SelectItem>
+            <SelectItem value=''>No Category</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.id} value={category.id}>
                 {category.name}
@@ -267,26 +325,24 @@ export default function EditHabitForm({
       </div>
 
       {/* General Form Errors */}
-      {errors?._form && (
-        <div className='text-destructive bg-destructive/10 col-span-4 rounded-md p-3 text-sm font-medium'>
-          <ul>
-            {errors._form.map((error: string, index: number) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
+      {errors?._errors && errors._errors.length > 0 && (
+        <div className='text-destructive bg-destructive/10 col-span-4 rounded-md p-2 text-sm'>
+          {errors._errors.join(', ')}
         </div>
       )}
 
       {/* Action Buttons */}
       <div className='flex justify-end gap-2 pt-4'>
-        <Button
-          type='button'
-          variant='outline'
-          onClick={onCancel}
-          disabled={isPending}
-        >
-          Cancel
-        </Button>
+        {onCancel && (
+          <Button
+            type='button'
+            variant='ghost'
+            onClick={onCancel}
+            disabled={isPending}
+          >
+            Cancel
+          </Button>
+        )}
         <Button type='submit' disabled={isPending}>
           {isPending ? (
             <>
