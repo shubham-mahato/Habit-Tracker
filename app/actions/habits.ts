@@ -36,24 +36,7 @@ export type AddHabitFormState = {
     name?: string[]
     description?: string[]
     frequency?: string[]
-    categoryId?: string[]
-    _form?: string[]
-  } | null
-}
-
-const CreateCategorySchema = z.object({
-  name: z
-    .string()
-    .min(1, { message: 'Category name cannot be empty.' })
-    .max(50, { message: 'Category name is too long (max 50 characters).' })
-    .trim(),
-})
-
-export type CreateCategoryState = {
-  success: boolean
-  message?: string | null
-  errors?: {
-    name?: string[]
+    categoryId?: string[] // NEW: Add categoryId errors
     _form?: string[]
   } | null
 }

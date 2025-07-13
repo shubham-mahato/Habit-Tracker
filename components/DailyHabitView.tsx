@@ -16,8 +16,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Pencil } from 'lucide-react'
 
-// Import types
-import type { Category } from '@prisma/client'
+// Import types and Prisma
+import type { Category, Habit, HabitRecord, Prisma } from '@prisma/client'
 
 // Import components
 import HabitHeatmap from './HabitHeatmap'
@@ -38,11 +38,24 @@ function getEndOfDayUTC(date: Date): Date {
   return end
 }
 
+// Define props interface
+interface DailyHabitViewProps {
+  currentCategoryFilter?: string // Optional category filter prop
+}
+
+// Define type for habits with included relations
+type HabitWithDetails = Habit & {
+  records: Pick<HabitRecord, 'id' | 'date' | 'completed'>[]
+  category: Category | null // Category can be null
+}
+
 /**
  * DailyHabitView - Server Component
- * Now includes HabitHeatmap visualization in each habit card
+ * Now includes category data with each habit
  */
-export default async function DailyHabitView() {
+export default async function DailyHabitView({
+  currentCategoryFilter,
+}: DailyHabitViewProps) {
   // --- 1. Authentication ---
   let userId: string | null = null
   try {
@@ -59,7 +72,7 @@ export default async function DailyHabitView() {
   }
 
   // --- 2. Data Fetching ---
-  let habitsWithTodayRecord = []
+  let habitsWithDetails: HabitWithDetails[] = []
   let userCategories: Category[] = []
 
   try {
@@ -70,14 +83,22 @@ export default async function DailyHabitView() {
     console.log(
       `Fetching records between: ${startOfToday.toISOString()} and ${endOfToday.toISOString()}`
     )
+    console.log(
+      `Category filter: ${currentCategoryFilter || 'None (All Categories)'}`
+    )
+
+    // Build the 'where' clause for the habits query dynamically
+    const habitWhereClause: Prisma.HabitWhereInput = {
+      userId: userId,
+      // Conditionally add categoryId filter if currentCategoryFilter is provided
+      ...(currentCategoryFilter && { categoryId: currentCategoryFilter }),
+    }
 
     // Fetch habits and categories concurrently
-    ;[habitsWithTodayRecord, userCategories] = await Promise.all([
-      // Fetch habits
+    ;[habitsWithDetails, userCategories] = await Promise.all([
+      // Fetch habits with the dynamic where clause
       prisma.habit.findMany({
-        where: {
-          userId: userId,
-        },
+        where: habitWhereClause, // Use the dynamically built where clause
         include: {
           records: {
             where: {
@@ -87,7 +108,10 @@ export default async function DailyHabitView() {
               },
             },
             take: 1,
+            select: { id: true, date: true, completed: true }, // Select specific fields
           },
+          // Include the full related category object
+          category: true,
         },
         orderBy: {
           createdAt: 'asc',
@@ -105,51 +129,53 @@ export default async function DailyHabitView() {
     ])
 
     console.log(
-      'Fetched habits with records:',
-      JSON.stringify(habitsWithTodayRecord, null, 2)
+      'Fetched habits with category details:',
+      JSON.stringify(habitsWithDetails, null, 2)
     )
   } catch (error) {
     console.error(
       'Database Error: Failed to fetch habits/records for DailyHabitView:',
       error
     )
-    return (
-      <Card className='bg-destructive/10 border-destructive mt-4'>
-        <CardHeader>
-          <CardTitle className='text-destructive'>Database Error</CardTitle>
-          <CardDescription className='text-destructive'>
-            Could not load habits. Please try again later.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    )
+    // Set empty arrays on error
+    habitsWithDetails = []
+    userCategories = []
   }
 
   // --- 3. Empty State ---
-  if (habitsWithTodayRecord.length === 0) {
+  if (habitsWithDetails.length === 0) {
+    // Provide context if filtered
+    const message = currentCategoryFilter
+      ? 'No habits found in this category.'
+      : 'No habits found. Add one to get started!'
+
     return (
       <Card className='mt-4 border-dashed shadow-none'>
         <CardHeader className='items-center text-center'>
-          <CardTitle>No Habits Yet!</CardTitle>
-          <CardDescription>
-            Add your first habit using the form above to start tracking.
-          </CardDescription>
+          <CardTitle>
+            {currentCategoryFilter ? 'No Habits in Category' : 'No Habits Yet!'}
+          </CardTitle>
+          <CardDescription>{message}</CardDescription>
         </CardHeader>
         <CardContent className='text-center'>
           <p className='text-muted-foreground text-sm'>
-            (You'll see your habits listed here for daily tracking.)
+            {currentCategoryFilter
+              ? 'Try selecting a different category or add a new habit to this category.'
+              : '(You will see your habits listed here for daily tracking.)'}
           </p>
         </CardContent>
       </Card>
     )
   }
 
-  // --- 4. Render Habit List with Heatmap ---
+  // --- 4. Render Habit List with Category Information ---
   return (
     <div className='mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
-      {habitsWithTodayRecord.map((habit) => {
+      {habitsWithDetails.map((habit) => {
+        // Access habit data, including the category
         const todayRecord = habit.records?.[0]
         const isCompletedToday = todayRecord?.completed ?? false
+        const categoryName = habit.category?.name // Access category name
 
         return (
           <Card
@@ -164,6 +190,12 @@ export default async function DailyHabitView() {
                 Frequency:{' '}
                 {habit.frequency.charAt(0).toUpperCase() +
                   habit.frequency.slice(1)}
+                {/* Display category name if it exists */}
+                {categoryName && (
+                  <span className='text-primary/80 bg-primary/10 ml-2 rounded px-1.5 py-0.5 text-xs font-medium'>
+                    {categoryName}
+                  </span>
+                )}
               </CardDescription>
             </CardHeader>
 

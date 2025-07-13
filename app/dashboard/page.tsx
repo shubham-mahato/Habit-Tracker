@@ -1,10 +1,11 @@
-// app/dashboard/page.tsx - Updated with DailyHabitView and categories
+// app/dashboard/page.tsx - Updated with CategoryFilter
 
 import { redirect } from 'next/navigation'
 import { auth } from '@clerk/nextjs/server'
 import DailyHabitView from '@/components/DailyHabitView'
 import AddHabitForm from '@/components/AddHabitForm'
 import CategoryManagement from '@/components/CategoryManagement'
+import CategoryFilter from '@/components/CategoryFilter' // NEW: Import CategoryFilter
 import { prisma } from '@/lib/prisma'
 import type { Category } from '@prisma/client'
 import {
@@ -16,7 +17,14 @@ import {
 } from '@/components/ui/card'
 import { Plus } from 'lucide-react'
 
-export default async function DashboardPage() {
+// Define props to accept search parameters
+interface DashboardPageProps {
+  searchParams?: { [key: string]: string | string[] | undefined }
+}
+
+export default async function DashboardPage({
+  searchParams,
+}: DashboardPageProps) {
   // Authentication check
   const { userId } = await auth()
 
@@ -25,7 +33,13 @@ export default async function DashboardPage() {
     redirect('/sign-in')
   }
 
-  // Fetch user categories for the forms
+  // Get the current category filter from searchParams for server-side logic
+  const currentCategoryFilter =
+    typeof searchParams?.category === 'string' && searchParams.category !== ''
+      ? searchParams.category
+      : undefined
+
+  // Fetch user categories for the forms and filter
   let userCategories: Category[] = []
   try {
     userCategories = await prisma.category.findMany({
@@ -69,9 +83,14 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
+      {/* NEW: Category Filter Section */}
+      <div className='mb-6'>
+        <CategoryFilter categories={userCategories} />
+      </div>
+
       {/* Section for displaying the list of habits with full functionality */}
       <section>
-        <DailyHabitView />
+        <DailyHabitView currentCategoryFilter={currentCategoryFilter} />
       </section>
     </div>
   )
