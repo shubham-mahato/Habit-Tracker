@@ -20,6 +20,7 @@ const HabitSchema = z.object({
   frequency: z.enum(['daily', 'weekly'], {
     required_error: 'Please select a frequency.',
   }),
+  categoryId: z.string().optional().nullable(), // Optional category
 })
 
 // Define the type for the return value (state of the form)
@@ -30,7 +31,8 @@ export type AddHabitFormState = {
     name?: string[]
     description?: string[]
     frequency?: string[]
-    _form?: string[] // For general form errors (like auth issues)
+    categoryId?: string[]
+    _form?: string[]
   } | null
 }
 
@@ -44,10 +46,11 @@ const EditHabitSchema = z.object({
     .string()
     .max(500, { message: 'Description is too long (max 500 characters).' })
     .optional()
-    .nullable(), // Allow null description
+    .nullable(),
   frequency: z.enum(['daily', 'weekly'], {
     errorMap: () => ({ message: 'Please select a valid frequency.' }),
   }),
+  categoryId: z.string().optional().nullable(), // Optional category
 })
 
 // Infer type from schema for formData argument
@@ -61,8 +64,9 @@ export type EditHabitState = {
     name?: string[]
     description?: string[]
     frequency?: string[]
+    categoryId?: string[]
     habitId?: string[]
-    _form?: string[] // For general errors (auth, permission, db)
+    _form?: string[]
   } | null
 }
 
@@ -319,6 +323,7 @@ export async function editHabit(
         name: name,
         description: description || null, // Handle empty strings as null
         frequency: frequency,
+        categoryId: validation.data.categoryId || null,
         // Prisma automatically handles `updatedAt` if schema is set up
       },
     })
@@ -552,7 +557,7 @@ export async function addHabitWithState(
     console.log(`Attempting to create habit for userId: ${userId}`)
     console.log(`Data: Name=${name}, Desc=${description}, Freq=${frequency}`)
 
-    // ⭐ NEW: First, ensure the user exists in the database
+    //  NEW: First, ensure the user exists in the database
     await prisma.user.upsert({
       where: {
         id: userId,
@@ -578,6 +583,7 @@ export async function addHabitWithState(
         name: name,
         description: description?.trim() ? description.trim() : null,
         frequency: frequency,
+        categoryId: validatedFields.data.categoryId || null,
       },
     })
 
@@ -616,5 +622,258 @@ export async function addHabit(formData: FormData): Promise<void> {
 
   if (!result.success) {
     throw new Error(result.message || 'Failed to add habit')
+  }
+}
+
+const CreateCategorySchema = z.object({
+  name: z
+    .string()
+    .min(1, { message: 'Category name cannot be empty.' })
+    .max(50, { message: 'Category name is too long (max 50 characters).' })
+    .trim(),
+})
+
+type CreateCategoryFormData = z.infer<typeof CreateCategorySchema>
+
+export type CreateCategoryState = {
+  success: boolean
+  message?: string | null
+  errors?: {
+    name?: string[]
+    _form?: string[]
+  } | null
+}
+
+export type DeleteCategoryState = {
+  success: boolean
+  message?: string | null
+  errors?: {
+    categoryId?: string[]
+    _form?: string[]
+  } | null
+}
+
+/**
+ * createCategory Server Action
+ *
+ * Creates a new category for the authenticated user
+ */
+export async function createCategory(
+  categoryData: CreateCategoryFormData
+): Promise<CreateCategoryState> {
+  console.log('Attempting to create category with data:', categoryData)
+
+  // --- 1. Authentication ---
+  let userId: string | null = null
+  try {
+    const { userId: clerkUserId } = await auth()
+    if (!clerkUserId) {
+      throw new Error('User not authenticated.')
+    }
+    userId = clerkUserId
+  } catch (error) {
+    console.error('Authentication Error in createCategory:', error)
+    return {
+      success: false,
+      message: 'Authentication failed.',
+      errors: { _form: ['User authentication failed.'] },
+    }
+  }
+
+  // --- 2. Validate Input Data ---
+  const validation = CreateCategorySchema.safeParse(categoryData)
+
+  if (!validation.success) {
+    console.error(
+      'Validation Error in createCategory:',
+      validation.error.flatten().fieldErrors
+    )
+    return {
+      success: false,
+      message: 'Invalid category data provided.',
+      errors: validation.error.flatten().fieldErrors,
+    }
+  }
+
+  const { name } = validation.data
+
+  try {
+    // --- 3. Check if category already exists for this user ---
+    const existingCategory = await prisma.category.findUnique({
+      where: {
+        userId_name: {
+          userId: userId,
+          name: name,
+        },
+      },
+    })
+
+    if (existingCategory) {
+      return {
+        success: false,
+        message: 'Category already exists.',
+        errors: { name: ['A category with this name already exists.'] },
+      }
+    }
+
+    // --- 4. Create Category ---
+    const newCategory = await prisma.category.create({
+      data: {
+        name: name,
+        userId: userId,
+      },
+    })
+
+    console.log(`Category created successfully: ${newCategory.id}`)
+
+    // --- 5. Revalidate Cache ---
+    revalidatePath('/dashboard')
+
+    // --- 6. Return Success ---
+    return {
+      success: true,
+      message: `Category "${name}" created successfully.`,
+    }
+  } catch (error) {
+    console.error(`Database Error while creating category:`, error)
+    return {
+      success: false,
+      message: 'Database Error: Failed to create category.',
+      errors: {
+        _form: ['An unexpected error occurred while creating the category.'],
+      },
+    }
+  }
+}
+
+/**
+ * deleteCategory Server Action
+ *
+ * Deletes a category and sets all associated habits to uncategorized
+ */
+export async function deleteCategory(
+  categoryId: string
+): Promise<DeleteCategoryState> {
+  console.log(`Attempting to delete category ID: ${categoryId}`)
+
+  // --- 1. Authentication ---
+  let userId: string | null = null
+  try {
+    const { userId: clerkUserId } = await auth()
+    if (!clerkUserId) {
+      throw new Error('User not authenticated.')
+    }
+    userId = clerkUserId
+  } catch (error) {
+    console.error('Authentication Error in deleteCategory:', error)
+    return {
+      success: false,
+      message: 'Authentication failed.',
+      errors: { _form: ['User authentication failed.'] },
+    }
+  }
+
+  // --- 2. Validate Category ID ---
+  if (!categoryId || typeof categoryId !== 'string') {
+    console.error('Invalid Category ID provided:', categoryId)
+    return {
+      success: false,
+      message: 'Invalid Category ID.',
+      errors: { categoryId: ['Invalid category identifier provided.'] },
+    }
+  }
+
+  try {
+    // --- 3. Authorization Check ---
+    const category = await prisma.category.findUnique({
+      where: {
+        id: categoryId,
+        userId: userId, // Ensure user owns the category
+      },
+      select: { id: true, name: true },
+    })
+
+    if (!category) {
+      console.warn(
+        `Authorization Failed: User ${userId} tried to delete category ${categoryId}`
+      )
+      return {
+        success: false,
+        message: 'Permission Denied or Category Not Found.',
+        errors: {
+          _form: [
+            'You do not have permission to delete this category, or it no longer exists.',
+          ],
+        },
+      }
+    }
+
+    const categoryName = category.name
+
+    // --- 4. Delete Category ---
+    // The onDelete: SetNull in the schema will automatically set categoryId to null for associated habits
+    await prisma.category.delete({
+      where: {
+        id: categoryId,
+      },
+    })
+
+    console.log(
+      `Category ${categoryId} (${categoryName}) deleted successfully.`
+    )
+
+    // --- 5. Revalidate Cache ---
+    revalidatePath('/dashboard')
+
+    // --- 6. Return Success ---
+    return {
+      success: true,
+      message: `Category "${categoryName}" deleted successfully.`,
+    }
+  } catch (error) {
+    console.error(
+      `Database Error while deleting category ${categoryId}:`,
+      error
+    )
+    return {
+      success: false,
+      message: 'Database Error: Failed to delete category.',
+      errors: {
+        _form: ['An unexpected error occurred while deleting the category.'],
+      },
+    }
+  }
+}
+
+/**
+ * getUserCategories - Helper function to fetch user's categories
+ */
+export async function getUserCategories() {
+  try {
+    const { userId } = await auth()
+    if (!userId) return []
+
+    const categories = await prisma.category.findMany({
+      where: {
+        userId: userId,
+      },
+      orderBy: {
+        name: 'asc',
+      },
+      select: {
+        id: true,
+        name: true,
+        _count: {
+          select: {
+            habits: true,
+          },
+        },
+      },
+    })
+
+    return categories
+  } catch (error) {
+    console.error('Error fetching user categories:', error)
+    return []
   }
 }
