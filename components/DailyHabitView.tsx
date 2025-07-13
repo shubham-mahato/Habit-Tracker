@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Pencil, Flame, Trophy } from 'lucide-react'
+import { Pencil, Flame, Trophy, Target } from 'lucide-react'
 
 // Import types and Prisma
 import type { Category, Habit, HabitRecord, Prisma } from '@prisma/client'
@@ -25,7 +25,10 @@ import EditHabitDialog from './EditHabitDialog'
 import DeleteHabitButton from './DeleteHabitButton'
 
 // Import helper and streak calculation function from streaks utility
-import { getUTCDate, calculateStreaks, StreakResult } from '@/lib/streaks'
+import { calculateStreaks, StreakResult } from '@/lib/streaks'
+
+// Import analytics function for completion percentage
+import { calculateCompletionPercentage, getUTCDate } from '@/lib/analytics'
 
 // --- Helper Functions for Date Range ---
 function getStartOfDayUTC(date: Date): Date {
@@ -171,21 +174,45 @@ export default async function DailyHabitView({
 
   // --- 4. Render Habit List with Category Information ---
   // Find today's date for checkbox logic (since we now fetch all records)
-  const startOfSelectedDay = getStartOfDayUTC(new Date())
+  const startOfSelectedDay = getUTCDate(new Date())
 
   return (
     <div className='mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3'>
       {habitsWithDetails.map((habit) => {
+        // Define period for analytics here (in the map scope)
+        const todayUTC = getUTCDate(new Date())
+        const endDatePeriod = todayUTC // End date is today
+        const startDatePeriod = getUTCDate(
+          new Date(
+            Date.UTC(
+              todayUTC.getUTCFullYear(),
+              todayUTC.getUTCMonth(),
+              todayUTC.getUTCDate() - 6
+            )
+          )
+        ) // Start date is 6 days ago (for 7-day period)
+
         // Find today's record from the complete fetched list
-        const todayRecord = habit.records.find(
-          (record) =>
+        const todayRecord = habit.records.find((record) => {
+          // Add defensive check for invalid dates in records
+          if (!record.date || isNaN(getUTCDate(record.date).getTime()))
+            return false
+          return (
             getUTCDate(record.date).getTime() === startOfSelectedDay.getTime()
-        )
+          )
+        })
         const isCompletedToday = todayRecord?.completed ?? false
         const categoryName = habit.category?.name // Access category name
 
         // 🔥 Calculate streaks using the complete habit history
         const streaks: StreakResult = calculateStreaks(habit.records)
+
+        // 📊 Calculate completion percentage for the last 7 days
+        const completionPercentageLast7Days = calculateCompletionPercentage(
+          habit.records,
+          startDatePeriod, // Now defined in this scope
+          endDatePeriod // Now defined in this scope
+        )
 
         // Helper for pluralization
         const pluralizeDays = (count: number) => (count === 1 ? 'day' : 'days')
@@ -248,7 +275,7 @@ export default async function DailyHabitView({
                 <HabitHeatmap habitId={habit.id} habitName={habit.name} />
               </div>
 
-              {/* 🔥 Enhanced Streak Information Display */}
+              {/* 📊 Enhanced Analytics Display with Completion Percentage */}
               <div className='text-muted-foreground mt-4 space-y-2 border-t pt-4 text-sm'>
                 <div className='flex items-center gap-2'>
                   <Flame className='h-4 w-4 text-orange-500' />
@@ -268,6 +295,16 @@ export default async function DailyHabitView({
                       {streaks.longestStreak}
                     </span>{' '}
                     {pluralizeDays(streaks.longestStreak)}
+                  </span>
+                </div>
+                <div className='flex items-center gap-2'>
+                  <Target className='h-4 w-4 text-blue-500' />
+                  <span>
+                    Last 7 Days:{' '}
+                    <span className='text-foreground font-medium'>
+                      {completionPercentageLast7Days}%
+                    </span>{' '}
+                    completed
                   </span>
                 </div>
               </div>

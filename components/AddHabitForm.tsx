@@ -3,7 +3,10 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
-import { useFormState, useFormStatus } from 'react-dom'
+import { useFormStatus } from 'react-dom'
+
+// Try to use useActionState from React in React 19
+const useActionState = React.useActionState || React.experimental_useActionState
 
 // ShadCN UI Components
 import { Label } from '@/components/ui/label'
@@ -65,7 +68,7 @@ export default function AddHabitForm({
   onFormSubmitSuccess?: () => void
   categories?: Category[] // NEW: Optional categories prop
 }) {
-  const [state, formAction] = useFormState(addHabitWithState, initialState)
+  const [state, formAction] = useActionState(addHabitWithState, initialState)
   const formRef = useRef<HTMLFormElement>(null) // Ref for resetting the form
 
   // Use useEffect to react to state changes and show toasts
