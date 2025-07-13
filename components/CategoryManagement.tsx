@@ -30,8 +30,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Plus, Trash2, Loader2, FolderOpen } from 'lucide-react'
 
-// Import Server Actions (you'll need to add these to your actions file)
-// import { createCategory, deleteCategory } from '@/app/actions/habits';
+// Import Server Actions (these already exist in your habits.ts file)
+import { createCategory, deleteCategory } from '@/app/actions/habits'
 
 interface CategoryManagementProps {
   categories: Category[]
@@ -40,7 +40,7 @@ interface CategoryManagementProps {
 /**
  * CategoryManagement Client Component
  *
- * Allows users to create and delete categories
+ * Allows users to create and delete categories using existing Server Actions
  */
 export default function CategoryManagement({
   categories,
@@ -58,20 +58,22 @@ export default function CategoryManagement({
 
     startTransition(async () => {
       try {
-        // TODO: Uncomment when you add the createCategory action
-        // const result = await createCategory({ name: newCategoryName.trim() });
+        // Use the existing Server Action from your habits.ts
+        const result = await createCategory({ name: newCategoryName.trim() })
 
-        // if (result.success) {
-        //   toast.success(result.message || "Category created successfully!");
-        //   setNewCategoryName('');
-        // } else {
-        //   toast.error(result.message || "Failed to create category");
-        // }
-
-        // Temporary placeholder
-        console.log('Creating category:', newCategoryName)
-        toast.success('Category feature coming soon!')
-        setNewCategoryName('')
+        if (result.success) {
+          toast.success(result.message || 'Category created successfully!')
+          setNewCategoryName('')
+        } else {
+          toast.error(result.message || 'Failed to create category')
+          // Handle specific field errors
+          if (result.errors?.name) {
+            toast.error(result.errors.name.join(', '))
+          }
+          if (result.errors?._form) {
+            toast.error(result.errors._form.join(', '))
+          }
+        }
       } catch (error) {
         console.error('Error creating category:', error)
         toast.error('An unexpected error occurred')
@@ -85,18 +87,17 @@ export default function CategoryManagement({
   ) => {
     startTransition(async () => {
       try {
-        // TODO: Uncomment when you add the deleteCategory action
-        // const result = await deleteCategory(categoryId);
+        // Use the existing Server Action from your habits.ts
+        const result = await deleteCategory(categoryId)
 
-        // if (result.success) {
-        //   toast.success(result.message || "Category deleted successfully!");
-        // } else {
-        //   toast.error(result.message || "Failed to delete category");
-        // }
-
-        // Temporary placeholder
-        console.log('Deleting category:', categoryId, categoryName)
-        toast.success('Delete feature coming soon!')
+        if (result.success) {
+          toast.success(result.message || 'Category deleted successfully!')
+        } else {
+          toast.error(result.message || 'Failed to delete category')
+          if (result.errors?._form) {
+            toast.error(result.errors._form.join(', '))
+          }
+        }
       } catch (error) {
         console.error('Error deleting category:', error)
         toast.error('An unexpected error occurred')
@@ -128,6 +129,7 @@ export default function CategoryManagement({
               onChange={(e) => setNewCategoryName(e.target.value)}
               placeholder='Enter category name (e.g., Health, Work, Personal)'
               disabled={isPending}
+              maxLength={50}
             />
           </div>
           <Button type='submit' disabled={isPending || !newCategoryName.trim()}>
@@ -162,7 +164,8 @@ export default function CategoryManagement({
                         variant='ghost'
                         size='sm'
                         disabled={isPending}
-                        className='text-destructive hover:text-destructive h-8 w-8 p-0'
+                        className='text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0'
+                        title={`Delete category "${category.name}"`}
                       >
                         <Trash2 className='h-4 w-4' />
                       </Button>
@@ -172,19 +175,29 @@ export default function CategoryManagement({
                         <AlertDialogTitle>Delete Category</AlertDialogTitle>
                         <AlertDialogDescription>
                           Are you sure you want to delete the category "
-                          {category.name}"? Habits in this category will become
-                          uncategorized.
+                          {category.name}"? This action cannot be undone. Habits
+                          in this category will become uncategorized.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogCancel disabled={isPending}>
+                          Cancel
+                        </AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() =>
                             handleDeleteCategory(category.id, category.name)
                           }
+                          disabled={isPending}
                           className='bg-destructive text-destructive-foreground hover:bg-destructive/90'
                         >
-                          Delete
+                          {isPending ? (
+                            <>
+                              <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                              Deleting...
+                            </>
+                          ) : (
+                            'Delete'
+                          )}
                         </AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
