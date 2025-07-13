@@ -20,12 +20,14 @@ const HabitSchema = z.object({
   frequency: z.enum(['daily', 'weekly'], {
     required_error: 'Please select a frequency.',
   }),
-  // NEW: Add optional categoryId
   categoryId: z
     .string()
-    .cuid({ message: 'Invalid category selected.' })
     .optional()
-    .nullable(),
+    .nullable()
+    .transform((val) => {
+      if (val === 'no-category' || val === '') return null
+      return val
+    }),
 })
 
 // Define the type for the return value (state of the form)
@@ -559,7 +561,10 @@ export async function addHabitWithState(
     name: formData.get('name'),
     description: formData.get('description'),
     frequency: formData.get('frequency'),
-    categoryId: formData.get('categoryId'),
+    categoryId:
+      formData.get('categoryId') === 'no-category'
+        ? null
+        : formData.get('categoryId'), // Convert 'no-category' to null
   }
 
   const validatedFields = HabitSchema.safeParse(formDataEntries)

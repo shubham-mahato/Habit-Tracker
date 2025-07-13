@@ -167,7 +167,7 @@ export default function AddHabitForm({
       {/* --- NEW: Category Field --- */}
       <div className='space-y-1'>
         <Label htmlFor='categoryId'>Category (Optional)</Label>
-        <Select name='categoryId' defaultValue=''>
+        <Select name='categoryId' defaultValue='no-category'>
           <SelectTrigger
             id='categoryId'
             aria-describedby={
@@ -177,7 +177,7 @@ export default function AddHabitForm({
             <SelectValue placeholder='Select a category (optional)' />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value=''>No Category</SelectItem>
+            <SelectItem value='no-category'>No Category</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.id} value={category.id}>
                 {category.name}

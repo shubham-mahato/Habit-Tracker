@@ -19,7 +19,7 @@ import { Plus } from 'lucide-react'
 
 // Define props to accept search parameters
 interface DashboardPageProps {
-  searchParams?: { [key: string]: string | string[] | undefined }
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
 export default async function DashboardPage({
@@ -33,10 +33,15 @@ export default async function DashboardPage({
     redirect('/sign-in')
   }
 
+  // Await searchParams before using
+  const resolvedSearchParams = await searchParams
+
   // Get the current category filter from searchParams for server-side logic
   const currentCategoryFilter =
-    typeof searchParams?.category === 'string' && searchParams.category !== ''
-      ? searchParams.category
+    typeof resolvedSearchParams?.category === 'string' &&
+    resolvedSearchParams.category !== '' &&
+    resolvedSearchParams.category !== 'all-categories'
+      ? resolvedSearchParams.category
       : undefined
 
   // Fetch user categories for the forms and filter

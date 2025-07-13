@@ -26,7 +26,7 @@ interface CategoryFilterProps {
   // No need to pass current filter value explicitly, we'll read it from URL
 }
 
-const ALL_CATEGORIES_VALUE = '' // Use empty string to represent "All Categories"
+const ALL_CATEGORIES_VALUE = 'all-categories' // Use non-empty string to represent "All Categories"
 
 /**
  * CategoryFilter Client Component
