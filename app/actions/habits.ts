@@ -20,7 +20,12 @@ const HabitSchema = z.object({
   frequency: z.enum(['daily', 'weekly'], {
     required_error: 'Please select a frequency.',
   }),
-  categoryId: z.string().optional().nullable(), // Optional category
+  // NEW: Add optional categoryId
+  categoryId: z
+    .string()
+    .cuid({ message: 'Invalid category selected.' })
+    .optional()
+    .nullable(),
 })
 
 // Define the type for the return value (state of the form)
@@ -50,9 +55,13 @@ const EditHabitSchema = z.object({
   frequency: z.enum(['daily', 'weekly'], {
     errorMap: () => ({ message: 'Please select a valid frequency.' }),
   }),
-  categoryId: z.string().optional().nullable(), // Optional category
+  // NEW: Add optional categoryId
+  categoryId: z
+    .string()
+    .cuid({ message: 'Invalid category selected.' })
+    .optional()
+    .nullable(),
 })
-
 // Infer type from schema for formData argument
 type EditHabitFormData = z.infer<typeof EditHabitSchema>
 
@@ -280,8 +289,8 @@ export async function editHabit(
     }
   }
 
-  // Use validated data from here
-  const { name, description, frequency } = validation.data
+  // Use validated data from here - ADD categoryId
+  const { name, description, frequency, categoryId } = validation.data
 
   try {
     // --- 4. Authorization Check ---
@@ -313,6 +322,22 @@ export async function editHabit(
       `Authorization successful for user ${userId} on habit ${habitId}.`
     )
 
+    // NEW: Verify categoryId belongs to the user if provided
+    if (categoryId) {
+      const categoryExists = await prisma.category.findFirst({
+        where: { id: categoryId, userId: userId },
+      })
+      if (!categoryExists) {
+        return {
+          success: false,
+          message: 'Invalid category selected.',
+          errors: {
+            categoryId: ['Selected category does not exist or belong to you.'],
+          },
+        }
+      }
+    }
+
     // --- 5. Database Update ---
     console.log(`Updating habit ${habitId} in database...`)
     await prisma.habit.update({
@@ -323,7 +348,7 @@ export async function editHabit(
         name: name,
         description: description || null, // Handle empty strings as null
         frequency: frequency,
-        categoryId: validation.data.categoryId || null,
+        categoryId: categoryId || null, // Use the destructured categoryId
         // Prisma automatically handles `updatedAt` if schema is set up
       },
     })
@@ -534,6 +559,7 @@ export async function addHabitWithState(
     name: formData.get('name'),
     description: formData.get('description'),
     frequency: formData.get('frequency'),
+    categoryId: formData.get('categoryId'),
   }
 
   const validatedFields = HabitSchema.safeParse(formDataEntries)
@@ -550,14 +576,32 @@ export async function addHabitWithState(
     }
   }
 
-  const { name, description, frequency } = validatedFields.data
+  const { name, description, frequency, categoryId } = validatedFields.data
 
   // --- 3. Perform Database Operation ---
   try {
     console.log(`Attempting to create habit for userId: ${userId}`)
-    console.log(`Data: Name=${name}, Desc=${description}, Freq=${frequency}`)
+    console.log(
+      `Data: Name=${name}, Desc=${description}, Freq=${frequency}, CategoryId=${categoryId}`
+    )
 
-    //  NEW: First, ensure the user exists in the database
+    // NEW: Verify categoryId belongs to the user if provided
+    if (categoryId) {
+      const categoryExists = await prisma.category.findFirst({
+        where: { id: categoryId, userId: userId },
+      })
+      if (!categoryExists) {
+        return {
+          success: false,
+          message: 'Invalid category selected.',
+          errors: {
+            categoryId: ['Selected category does not exist or belong to you.'],
+          },
+        }
+      }
+    }
+
+    // First, ensure the user exists in the database
     await prisma.user.upsert({
       where: {
         id: userId,
@@ -583,7 +627,7 @@ export async function addHabitWithState(
         name: name,
         description: description?.trim() ? description.trim() : null,
         frequency: frequency,
-        categoryId: validatedFields.data.categoryId || null,
+        categoryId: categoryId || null, // Use the destructured categoryId
       },
     })
 

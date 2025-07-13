@@ -17,12 +17,13 @@ import {
 // Import the form component
 import EditHabitForm from './EditHabitForm'
 
-// Import Prisma type for habit prop
-import type { Habit } from '@prisma/client'
+// Import Prisma types for habit and category props
+import type { Habit, Category } from '@prisma/client'
 
 // Define props
 interface EditHabitDialogProps {
   habit: Habit
+  categories: Category[] // NEW: Accept categories array
   children: React.ReactNode // To wrap the trigger button
 }
 
@@ -30,10 +31,11 @@ interface EditHabitDialogProps {
  * EditHabitDialog Client Component
  *
  * Manages the ShadCN Dialog visibility and renders the EditHabitForm
- * for a specific habit.
+ * for a specific habit with category selection support.
  */
 export default function EditHabitDialog({
   habit,
+  categories,
   children,
 }: EditHabitDialogProps) {
   // State to control dialog visibility
@@ -68,6 +70,7 @@ export default function EditHabitDialog({
         {/* Render the form inside the content area */}
         <EditHabitForm
           habit={habit}
+          categories={categories} // NEW: Pass categories to the form
           onCancel={handleCloseDialog} // Pass function to allow form's cancel button to work
           onFormSubmit={handleSuccessfulSubmit} // Pass function to close after successful save
         />

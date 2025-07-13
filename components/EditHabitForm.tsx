@@ -21,12 +21,13 @@ import {
 import { Loader2 } from 'lucide-react' // For loading indicator
 
 // Import Prisma type and the Server Action
-import type { Habit } from '@prisma/client'
+import type { Habit, Category } from '@prisma/client'
 import { editHabit, EditHabitState } from '@/app/actions/habits'
 
 // Define props for the form
 interface EditHabitFormProps {
-  habit: Habit // The habit object to pre-fill the form
+  habit: Habit & { categoryId?: string | null } // Ensure categoryId is available
+  categories: Category[] // NEW: Accept categories array
   onFormSubmit?: () => void // Function to call on successful submission
   onCancel?: () => void // To close dialog from within form
 }
@@ -38,6 +39,12 @@ const EditHabitSchema = z.object({
   frequency: z.enum(['daily', 'weekly'], {
     errorMap: () => ({ message: 'Please select a valid frequency.' }),
   }),
+  // NEW: Add optional categoryId validation
+  categoryId: z
+    .string()
+    .cuid({ message: 'Invalid category selected.' })
+    .optional()
+    .nullable(),
 })
 
 type EditHabitFormData = z.infer<typeof EditHabitSchema>
@@ -53,6 +60,7 @@ type FormErrors = z.ZodFormattedError<EditHabitFormData, string> | null
  */
 export default function EditHabitForm({
   habit,
+  categories,
   onFormSubmit,
   onCancel,
 }: EditHabitFormProps) {
@@ -65,6 +73,7 @@ export default function EditHabitForm({
     name: habit.name,
     description: habit.description ?? '', // Handle null description
     frequency: habit.frequency as 'daily' | 'weekly', // Ensure type matches
+    categoryId: habit.categoryId ?? undefined, // NEW: Initialize categoryId
   })
   // State specifically for Zod validation errors
   const [errors, setErrors] = useState<FormErrors>(null)
@@ -99,13 +108,34 @@ export default function EditHabitForm({
     }
   }
 
+  // NEW: Handler for Category Select
+  const handleCategoryChange = (value: string) => {
+    // Map empty string value from "No Category" option back to undefined for schema
+    setFormData((prev) => ({
+      ...prev,
+      categoryId: value === '' ? undefined : value,
+    }))
+    if (errors?.categoryId?._errors) {
+      setErrors((prev) => {
+        if (!prev) return null
+        const newErrors = { ...prev }
+        delete newErrors.categoryId
+        return newErrors
+      })
+    }
+  }
+
   // --- Form Submission Handler ---
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setErrors(null) // Clear previous errors
 
     // --- Client-side Validation ---
-    const validation = EditHabitSchema.safeParse(formData)
+    const validation = EditHabitSchema.safeParse({
+      ...formData,
+      // Ensure categoryId is null if undefined/empty string before validation
+      categoryId: formData.categoryId || null,
+    })
 
     if (!validation.success) {
       const zodErrors = validation.error.format()
@@ -251,6 +281,42 @@ export default function EditHabitForm({
             className='text-destructive col-span-3 col-start-2 text-sm'
           >
             {getFieldError('frequency')}
+          </p>
+        )}
+      </div>
+
+      {/* --- NEW: Category Field --- */}
+      <div className='grid grid-cols-4 items-center gap-x-4 gap-y-1'>
+        <Label htmlFor='categoryId' className='text-right'>
+          Category
+        </Label>
+        <Select
+          name='categoryId'
+          value={formData.categoryId ?? ''}
+          onValueChange={handleCategoryChange}
+        >
+          <SelectTrigger
+            id='categoryId'
+            className='col-span-3'
+            aria-invalid={!!getFieldError('categoryId')}
+          >
+            <SelectValue placeholder='Select a category (optional)' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value=''>No Category</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.id}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {getFieldError('categoryId') && (
+          <p
+            id='categoryId-error'
+            className='text-destructive col-span-3 col-start-2 text-sm'
+          >
+            {getFieldError('categoryId')}
           </p>
         )}
       </div>

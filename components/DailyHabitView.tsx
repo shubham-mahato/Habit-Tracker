@@ -16,6 +16,9 @@ import {
 import { Button } from '@/components/ui/button'
 import { Pencil } from 'lucide-react'
 
+// Import types
+import type { Category } from '@prisma/client'
+
 // Import components
 import HabitHeatmap from './HabitHeatmap'
 import EditHabitDialog from './EditHabitDialog'
@@ -57,6 +60,8 @@ export default async function DailyHabitView() {
 
   // --- 2. Data Fetching ---
   let habitsWithTodayRecord = []
+  let userCategories: Category[] = []
+
   try {
     const today = new Date()
     const startOfToday = getStartOfDayUTC(today)
@@ -66,25 +71,38 @@ export default async function DailyHabitView() {
       `Fetching records between: ${startOfToday.toISOString()} and ${endOfToday.toISOString()}`
     )
 
-    habitsWithTodayRecord = await prisma.habit.findMany({
-      where: {
-        userId: userId,
-      },
-      include: {
-        records: {
-          where: {
-            date: {
-              gte: startOfToday,
-              lt: endOfToday,
-            },
-          },
-          take: 1,
+    // Fetch habits and categories concurrently
+    ;[habitsWithTodayRecord, userCategories] = await Promise.all([
+      // Fetch habits
+      prisma.habit.findMany({
+        where: {
+          userId: userId,
         },
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    })
+        include: {
+          records: {
+            where: {
+              date: {
+                gte: startOfToday,
+                lt: endOfToday,
+              },
+            },
+            take: 1,
+          },
+        },
+        orderBy: {
+          createdAt: 'asc',
+        },
+      }),
+      // Fetch categories
+      prisma.category.findMany({
+        where: {
+          userId: userId,
+        },
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+    ])
 
     console.log(
       'Fetched habits with records:',
@@ -114,7 +132,7 @@ export default async function DailyHabitView() {
         <CardHeader className='items-center text-center'>
           <CardTitle>No Habits Yet!</CardTitle>
           <CardDescription>
-            Add your first habit using the button above to start tracking.
+            Add your first habit using the form above to start tracking.
           </CardDescription>
         </CardHeader>
         <CardContent className='text-center'>
@@ -188,7 +206,7 @@ export default async function DailyHabitView() {
 
             <CardFooter className='flex justify-end gap-2 border-t pt-4'>
               {/* Edit Button wrapped with EditHabitDialog */}
-              <EditHabitDialog habit={habit}>
+              <EditHabitDialog habit={habit} categories={userCategories}>
                 <Button
                   variant='outline'
                   size='icon'
