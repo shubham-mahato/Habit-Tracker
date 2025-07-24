@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -19,6 +19,7 @@
     "type-check:watch": "tsc --noEmit --watch",
     "clean": "rm -rf .next out dist",
     "reset": "npm run clean && rm -rf node_modules && npm install",
+    "postinstall": "prisma generate",
     "pre-commit": "npm run type-check && npm run lint:check && npm run format:check"
   },
   "dependencies": {
